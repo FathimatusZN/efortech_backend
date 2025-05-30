@@ -215,7 +215,6 @@ exports.updateCertificate = async (req, res) => {
     !certificate_id ||
     !registration_participant_id ||
     !issued_date ||
-    !expired_date ||
     !cert_file
   ) {
     return sendBadRequestResponse(res, "All required fields must be complete");
