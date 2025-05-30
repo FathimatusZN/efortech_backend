@@ -61,7 +61,7 @@ exports.previewTrainingCertificateEmail = async (req, res) => {
       certificateNumber: certificate_number,
       trainingName: training_name,
       issuedDate: issued_date,
-      expiredDate: expired_date || "Tidak ada",
+      expiredDate: expired_date || "No Expiry Date",
     });
 
     return res.status(200).json({
@@ -127,7 +127,7 @@ exports.sendTrainingCertificateEmail = async (req, res) => {
       issuedDate: issued_date.toISOString().split("T")[0],
       expiredDate: expired_date
         ? expired_date.toISOString().split("T")[0]
-        : "Tidak ada",
+        : "No Expiry Date",
     });
 
     const info = await sendEmail({ to: email, subject, html });
