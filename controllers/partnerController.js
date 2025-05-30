@@ -20,17 +20,33 @@ const generateCustomId = (prefix) => {
   return `${prefix}-${timestamp}-${randomStr}`; // Format: PREFIX-YYYYMMDDHHMM-RANDOM
 };
 
-// Get all partners
+// Get all partners with optional search and filter
 exports.getAllPartners = async (req, res) => {
+  const { search = "", category, status } = req.query;
+
   try {
-    const result = await db.query(
-      "SELECT * FROM partners ORDER BY partner_name ASC"
-    );
-    return sendSuccessResponse(
-      res,
-      "Partner list fetched successfully",
-      result.rows
-    );
+    let baseQuery = "SELECT * FROM partners WHERE 1=1";
+    const values = [];
+
+    if (search) {
+      values.push(`%${search.toLowerCase()}%`);
+      baseQuery += ` AND LOWER(partner_name) LIKE $${values.length}`;
+    }
+
+    if (category !== undefined) {
+      values.push(Number(category));
+      baseQuery += ` AND category = $${values.length}`;
+    }
+
+    if (status !== undefined) {
+      values.push(Number(status));
+      baseQuery += ` AND status = $${values.length}`;
+    }
+
+    baseQuery += " ORDER BY partner_name ASC";
+
+    const result = await db.query(baseQuery, values);
+    return sendSuccessResponse(res, "Partner list fetched successfully", result.rows);
   } catch (error) {
     console.error("Error fetching partners:", error);
     return sendErrorResponse(res, "Failed to fetch partners");
