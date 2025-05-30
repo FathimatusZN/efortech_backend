@@ -8,6 +8,8 @@ const {
 const axios = require("axios");
 
 const getCertificateStatus = (expiredDate) => {
+  if (!expiredDate) return "Valid";
+
   const today = new Date();
   const expiry = new Date(expiredDate);
   return today <= expiry ? "Valid" : "Expired";

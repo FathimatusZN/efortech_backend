@@ -5,7 +5,11 @@ const {
 } = require("../utils/responseUtils");
 
 function getValidityStatus(expiredDate) {
-  return new Date(expiredDate) < new Date() ? "Expired" : "Valid";
+  if (!expiredDate) return "Valid";
+
+  const today = new Date();
+  const expiry = new Date(expiredDate);
+  return today <= expiry ? "Valid" : "Expired";
 }
 
 // Endpoint for get all certificates (certificate & user_certificates)
