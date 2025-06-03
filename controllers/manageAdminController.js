@@ -217,7 +217,7 @@ exports.deleteMultipleAdmins = async (req, res) => {
 
 // Get All Admins with optional filters
 exports.getAdmins = async (req, res) => {
-  const { name, email, id, role, status } = req.query;
+  const { name, email, id, role, status, search } = req.query;
 
   const formatWIB = (dateStr) => {
     if (!dateStr) return null;
@@ -257,6 +257,11 @@ exports.getAdmins = async (req, res) => {
   if (status) {
     query += ` AND a.status = $${i++}`;
     params.push(status);
+  }
+  if (search) {
+    query += ` AND (u.fullname ILIKE $${i} OR u.email ILIKE $${i})`;
+    params.push(`%${search}%`);
+    i++;
   }
 
   query += ` ORDER BY a.created_date DESC`;
