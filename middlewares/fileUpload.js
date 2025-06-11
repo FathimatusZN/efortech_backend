@@ -1,108 +1,69 @@
 const multer = require("multer");
-const { Storage } = require("@google-cloud/storage");
 const path = require("path");
+const fs = require("fs");
 const { sendErrorResponse } = require("../utils/responseUtils");
 
-const storage = new Storage({
-  credentials: JSON.parse(process.env.NEXT_PUBLIC_GOOGLE_KEY_CREDENTIAL),
-});
-
-const bucket = storage.bucket(process.env.NEXT_PUBLIC_GCS_BUCKET_NAME);
-
-const multerUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }, // File size limit 10MB
-  fileFilter: (req, file, cb) => {
-    const allowedImageMimeTypes = [
-      "image/jpeg",
-      "image/png",
-      "image/jpg",
-      "image/heic",
-      "image/webp",
-    ];
-    const allowedFileMimeTypes = ["application/pdf", "application/msword"];
-
-    // Check if the file is an image or a supported file type
-    if (
-      allowedImageMimeTypes.includes(file.mimetype) ||
-      allowedFileMimeTypes.includes(file.mimetype)
-    ) {
-      cb(null, true); // Allow file upload
-    } else {
-      cb(new Error("Only image, PDF, DOCX, or ZIP files are allowed"), false);
-    }
-  },
-}).array("files", 3); // up to 3 files
+const BASE_URL = process.env.BASE_URL;
 
 const getFolderFromPath = (reqPath) => {
-  if (reqPath.includes("/registration")) return "registration_payment";
-  if (reqPath.includes("/certificate")) return "certificate_files";
-  if (reqPath.includes("/ucertificate")) return "user_certificate_files";
-  return "misc_files";
+  if (reqPath.includes("/articles")) return "article_image";
+  if (reqPath.includes("/user")) return "user_image";
+  if (reqPath.includes("/training")) return "training_image";
+  if (reqPath.includes("/partner")) return "partner_logo";
+  if (reqPath.includes("/home")) return "home_content";
+  return "misc_image";
 };
 
-const uploadFile = (req, res, next) => {
-  multerUpload(req, res, async (err) => {
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const folder = getFolderFromPath(req.originalUrl);
+    const fullPath = path.join(__dirname, "..", "uploads", folder);
+    fs.mkdirSync(fullPath, { recursive: true });
+    req.uploadFolder = folder;
+    cb(null, fullPath);
+  },
+  filename: (req, file, cb) => {
+    const timestamp = new Date()
+      .toISOString()
+      .replace(/[-T:.Z]/g, "")
+      .slice(0, 14);
+    const safeName = file.originalname.replace(/\s+/g, "_");
+    cb(null, `${timestamp}-${safeName}`);
+  },
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: (req, file, cb) => {
+    if (!file.mimetype.startsWith("image/")) {
+      return cb(new Error("File must be an image"), false);
+    }
+    cb(null, true);
+  },
+}).array("images", 3);
+
+module.exports = (req, res, next) => {
+  upload(req, res, (err) => {
     if (err) {
-      if (err.code === "LIMIT_FILE_SIZE") {
-        return sendErrorResponse(res, "File size exceeds 10MB limit");
-      }
-      if (err.message === "Only image, PDF or DOCX are allowed") {
-        return sendErrorResponse(res, "Only image, PDF or DOCX are allowed");
-      }
-      return sendErrorResponse(res, err.message || "File upload error");
+      console.error("Upload error:", err);
+      return sendErrorResponse(res, err.message || "Image upload error");
     }
 
     if (!req.files || req.files.length === 0) {
-      return sendErrorResponse(res, "No files uploaded");
+      return sendErrorResponse(res, "No image uploaded");
     }
 
-    try {
-      const uploadedFiles = [];
-      const folder = getFolderFromPath(req.originalUrl);
+    const folder = req.uploadFolder || "misc_image";
+    req.files = req.files.map((file) => {
+      const localPath = `/uploads/${folder}/${file.filename}`;
+      const fullUrl = `${BASE_URL}${localPath}`;
+      file.localFilePath = localPath;
+      file.fullUrl = fullUrl;
+      console.log("Saved file URL to DB:", fullUrl); // LOG untuk debug
+      return file;
+    });
 
-      for (const file of req.files) {
-        const getWIBTimestamp = () => {
-          const now = new Date();
-          const wibOffset = 7 * 60 * 60 * 1000;
-          const wib = new Date(now.getTime() + wibOffset);
-          return wib
-            .toISOString()
-            .replace(/[-T:.Z]/g, "")
-            .slice(0, 14);
-        };
-
-        const timestamp = getWIBTimestamp();
-
-        const ext = path.extname(file.originalname);
-        const safeName = file.originalname.replace(/\s+/g, "_");
-        const fileName = `${folder}/${timestamp}-${safeName}`;
-        const blob = bucket.file(fileName);
-
-        const blobStream = blob.createWriteStream({
-          metadata: {
-            contentType: file.mimetype,
-          },
-        });
-
-        await new Promise((resolve, reject) => {
-          blobStream.on("error", reject);
-          blobStream.on("finish", () => {
-            file.cloudStoragePublicUrl = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
-            uploadedFiles.push(file);
-            resolve();
-          });
-          blobStream.end(file.buffer);
-        });
-      }
-
-      req.files = uploadedFiles;
-      next();
-    } catch (uploadError) {
-      console.error("Upload error:", uploadError);
-      return sendErrorResponse(res, "Failed to upload files");
-    }
+    next();
   });
 };
-
-module.exports = uploadFile;

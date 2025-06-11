@@ -47,15 +47,11 @@ router.put("/update/:id", updateArticle);
 
 // Endpoint for uploading an image
 router.post("/upload-image", uploadFile, (req, res) => {
-  if (
-    !req.files ||
-    req.files.length === 0 ||
-    !req.files[0].cloudStoragePublicUrl
-  ) {
+  if (!req.files || req.files.length === 0 || !req.files[0].fullUrl) {
     return sendErrorResponse(res, "Failed Upload");
   }
   return sendSuccessResponse(res, "Upload successful", {
-    imageUrl: req.files[0].cloudStoragePublicUrl,
+    imageUrl: req.files[0].fullUrl,
   });
 });
 

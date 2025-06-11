@@ -10,7 +10,15 @@ const app = express();
 app.use(bodyParser.json({ limit: "5mb" }));
 app.use(bodyParser.urlencoded({ extended: true, limit: "5mb" }));
 
-app.use(cors({ origin: "http://localhost:3000" }));
+app.use(
+  cors({
+    origin: [
+      "http://localhost:3000",
+      "https://edu.efortechsolutions.com",
+      "http://157.66.34.124/",
+    ],
+  })
+);
 app.use(express.json());
 
 // Import & gunakan routes
@@ -56,6 +64,8 @@ app.get("/api/message", (req, res) => {
 app.get("/", (req, res) => {
   res.send("Backend is running...");
 });
+
+app.use("/uploads", express.static("uploads"));
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

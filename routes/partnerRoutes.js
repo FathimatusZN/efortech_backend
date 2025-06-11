@@ -44,12 +44,12 @@ router.post("/partner_logo", uploadFile, (req, res) => {
 
   const uploadedImage = req.files[0];
 
-  if (!uploadedImage.cloudStoragePublicUrl) {
+  if (!uploadedImage.fullUrl) {
     return sendErrorResponse(res, "Upload failed: No public URL found");
   }
 
   return sendSuccessResponse(res, "Upload successful", {
-    imageUrl: uploadedImage.cloudStoragePublicUrl,
+    imageUrl: uploadedImage.fullUrl,
   });
 });
 
