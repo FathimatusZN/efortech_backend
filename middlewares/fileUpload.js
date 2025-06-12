@@ -3,16 +3,14 @@ const path = require("path");
 const fs = require("fs");
 const { sendErrorResponse } = require("../utils/responseUtils");
 
-const BASE_URL = process.env.BASE_URL;
-
 const getFolderFromPath = (reqPath) => {
-  if (reqPath.includes("/articles")) return "article_image";
-  if (reqPath.includes("/user")) return "user_image";
-  if (reqPath.includes("/training")) return "training_image";
-  if (reqPath.includes("/partner")) return "partner_logo";
-  if (reqPath.includes("/home")) return "home_content";
-  return "misc_image";
+  if (reqPath.includes("/registration")) return "registration_payment";
+  if (reqPath.includes("/certificate")) return "certificate_files";
+  if (reqPath.includes("/ucertificate")) return "user_certificate_files";
+  return "misc_files";
 };
+
+const BASE_URL = process.env.BASE_URL;
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -34,36 +32,44 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
   fileFilter: (req, file, cb) => {
-    if (!file.mimetype.startsWith("image/")) {
-      return cb(new Error("File must be an image"), false);
+    const allowedImageMimeTypes = [
+      "image/jpeg",
+      "image/png",
+      "image/jpg",
+      "image/heic",
+      "image/webp",
+    ];
+    const allowedFileMimeTypes = ["application/pdf", "application/msword"];
+    if (
+      allowedImageMimeTypes.includes(file.mimetype) ||
+      allowedFileMimeTypes.includes(file.mimetype)
+    ) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only image, PDF, or DOCX files are allowed"), false);
     }
-    cb(null, true);
   },
-}).array("images", 3);
+}).array("files", 3);
 
 module.exports = (req, res, next) => {
   upload(req, res, (err) => {
     if (err) {
       console.error("Upload error:", err);
-      return sendErrorResponse(res, err.message || "Image upload error");
+      return sendErrorResponse(res, err.message || "File upload error");
     }
-
     if (!req.files || req.files.length === 0) {
-      return sendErrorResponse(res, "No image uploaded");
+      return sendErrorResponse(res, "No file uploaded");
     }
 
-    const folder = req.uploadFolder || "misc_image";
+    const folder = req.uploadFolder || "misc_files";
     req.files = req.files.map((file) => {
-      const localPath = `/uploads/${folder}/${file.filename}`;
-      const fullUrl = `${BASE_URL}${localPath}`;
-      file.localFilePath = localPath;
-      file.fullUrl = fullUrl;
-      console.log("Saved file URL to DB:", fullUrl); // LOG untuk debug
+      file.localFilePath = `/uploads/${folder}/${file.filename}`;
+      file.fullUrl = `${BASE_URL}/uploads/${folder}/${file.filename}`;
+      console.log("Saved file URL to DB:", file.fullUrl);
       return file;
     });
-
     next();
   });
 };
