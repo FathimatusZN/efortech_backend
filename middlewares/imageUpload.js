@@ -47,8 +47,14 @@ module.exports = (req, res, next) => {
   upload(req, res, (err) => {
     if (err) {
       console.error("Upload error:", err);
+
+      if (err.code === "LIMIT_FILE_SIZE") {
+        return sendErrorResponse(res, "Image too large, maximum 5MB");
+      }
+
       return sendErrorResponse(res, err.message || "Image upload error");
     }
+
     if (!req.files || req.files.length === 0) {
       return sendErrorResponse(res, "No image uploaded");
     }
