@@ -57,6 +57,11 @@ module.exports = (req, res, next) => {
   upload(req, res, (err) => {
     if (err) {
       console.error("Upload error:", err);
+
+      if (err.code === "LIMIT_FILE_SIZE") {
+        return sendErrorResponse(res, "File too large, maximum 10MB");
+      }
+
       return sendErrorResponse(res, err.message || "File upload error");
     }
     if (!req.files || req.files.length === 0) {
