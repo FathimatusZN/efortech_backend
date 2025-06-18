@@ -48,6 +48,7 @@ const certificateValidationTemplate = ({
   expiredDate,
   status,
   notes,
+  originalNumber,
 }) => {
   const isAccepted = status === "Accepted";
   const isRejected = status === "Rejected";
@@ -63,7 +64,9 @@ const certificateValidationTemplate = ({
         <p><strong>Certificate Details:</strong></p>
         <table cellpadding="6" cellspacing="0" style="border-collapse: collapse;">
           <tr><td style="padding: 4px;"><strong>Certificate Name</strong></td><td style="padding: 4px;">:</td><td style="padding: 4px;">${certificateName}</td></tr>
-          <tr><td style="padding: 4px;"><strong>Certificate Number</strong></td><td style="padding: 4px;">:</td><td style="padding: 4px;">${certificateNumber}</td></tr>
+          <tr><td style="padding: 4px;"><strong>Certificate Number</strong></td><td style="padding: 4px;">:</td><td style="padding: 4px;">${
+            originalNumber || certificateNumber
+          }</td></tr>
           <tr><td style="padding: 4px;"><strong>Issued Date</strong></td><td style="padding: 4px;">:</td><td style="padding: 4px;">${issuedDate}</td></tr>
           <tr><td style="padding: 4px;"><strong>Expiration Date</strong></td><td style="padding: 4px;">:</td><td style="padding: 4px;">${
             expiredDate || "No Expiry Date"
