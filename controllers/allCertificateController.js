@@ -170,6 +170,7 @@ exports.searchCertificates = async (req, res) => {
         : [validity_status];
       cert1Conditions.push(`(
         CASE 
+          WHEN c.expired_date IS NULL THEN 'Valid'
           WHEN c.expired_date >= CURRENT_DATE THEN 'Valid'
           ELSE 'Expired'
         END
@@ -211,7 +212,13 @@ exports.searchCertificates = async (req, res) => {
           : safeSortBy === "fullname"
           ? "u.fullname"
           : `c.${safeSortBy}`
-      } ${safeSortOrder}`;
+      } ${safeSortOrder} ${
+        safeSortBy === "expired_date"
+          ? safeSortOrder === "ASC"
+            ? "NULLS LAST"
+            : "NULLS FIRST"
+          : ""
+      }`;
 
       const cert1 = await client.query(query1, cert1Values);
       cert1WithStatus = cert1.rows.map((cert) => ({
@@ -278,6 +285,7 @@ exports.searchCertificates = async (req, res) => {
           : [validity_status];
         cert2Conditions.push(`(
           CASE 
+            WHEN expired_date IS NULL THEN 'Valid'
             WHEN expired_date >= CURRENT_DATE THEN 'Valid'
             ELSE 'Expired'
           END
@@ -306,7 +314,13 @@ exports.searchCertificates = async (req, res) => {
 
       query2 += ` ORDER BY ${
         safeSortBy === "certificate_title" ? "cert_type" : safeSortBy
-      } ${safeSortOrder}`;
+      } ${safeSortOrder} ${
+        safeSortBy === "expired_date"
+          ? safeSortOrder === "ASC"
+            ? "NULLS LAST"
+            : "NULLS FIRST"
+          : ""
+      }`;
 
       const cert2 = await client.query(query2, cert2Values);
       cert2WithStatus = cert2.rows.map((cert) => ({
@@ -321,6 +335,26 @@ exports.searchCertificates = async (req, res) => {
         : type === "2"
         ? cert2WithStatus
         : [...cert1WithStatus, ...cert2WithStatus];
+
+    if (!type) {
+      combined.sort((a, b) => {
+        const valueA = a[safeSortBy]
+          ? new Date(a[safeSortBy]).getTime()
+          : safeSortOrder === "ASC" || safeSortOrder === "asc"
+          ? Infinity
+          : -Infinity;
+
+        const valueB = b[safeSortBy]
+          ? new Date(b[safeSortBy]).getTime()
+          : safeSortOrder === "ASC" || safeSortOrder === "asc"
+          ? Infinity
+          : -Infinity;
+
+        return safeSortOrder === "ASC" || safeSortOrder === "asc"
+          ? valueA - valueB
+          : valueB - valueA;
+      });
+    }
 
     return sendSuccessResponse(res, "Certificates fetched", combined);
   } catch (err) {
