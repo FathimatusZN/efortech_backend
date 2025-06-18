@@ -34,15 +34,11 @@ router.get("/:id", getUserCertificateById);
 
 // Upload certificate file
 router.post("/upload-ucertificate", uploadFile, (req, res) => {
-  if (
-    !req.files ||
-    req.files.length === 0 ||
-    !req.files[0].cloudStoragePublicUrl
-  ) {
+  if (!req.files || req.files.length === 0 || !req.files[0].fullUrl) {
     return sendErrorResponse(res, "Failed Upload");
   }
   return sendSuccessResponse(res, "Upload successful", {
-    fileUrl: req.files[0].cloudStoragePublicUrl,
+    fileUrl: req.files[0].fullUrl,
   });
 });
 

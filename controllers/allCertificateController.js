@@ -49,6 +49,7 @@ exports.getAllCertificates = async (req, res) => {
       SELECT 
         user_certificate_id AS certificate_id,
         certificate_number,
+        original_number,
         fullname,
         cert_type AS certificate_title,
         issued_date,
@@ -169,6 +170,7 @@ exports.searchCertificates = async (req, res) => {
         : [validity_status];
       cert1Conditions.push(`(
         CASE 
+          WHEN c.expired_date IS NULL THEN 'Valid'
           WHEN c.expired_date >= CURRENT_DATE THEN 'Valid'
           ELSE 'Expired'
         END
@@ -210,7 +212,13 @@ exports.searchCertificates = async (req, res) => {
           : safeSortBy === "fullname"
           ? "u.fullname"
           : `c.${safeSortBy}`
-      } ${safeSortOrder}`;
+      } ${safeSortOrder} ${
+        safeSortBy === "expired_date"
+          ? safeSortOrder === "ASC"
+            ? "NULLS LAST"
+            : "NULLS FIRST"
+          : ""
+      }`;
 
       const cert1 = await client.query(query1, cert1Values);
       cert1WithStatus = cert1.rows.map((cert) => ({
@@ -261,7 +269,9 @@ exports.searchCertificates = async (req, res) => {
       if (q) {
         const search = `%${q}%`;
         cert2Conditions.push(`(
-          certificate_number ILIKE $${cert2Values.length + 1} OR
+          COALESCE(original_number, certificate_number) ILIKE $${
+            cert2Values.length + 1
+          } OR
           fullname ILIKE $${cert2Values.length + 2} OR
           cert_type ILIKE $${cert2Values.length + 3} OR
           CAST(issued_date AS TEXT) ILIKE $${cert2Values.length + 4} OR
@@ -275,6 +285,7 @@ exports.searchCertificates = async (req, res) => {
           : [validity_status];
         cert2Conditions.push(`(
           CASE 
+            WHEN expired_date IS NULL THEN 'Valid'
             WHEN expired_date >= CURRENT_DATE THEN 'Valid'
             ELSE 'Expired'
           END
@@ -286,6 +297,7 @@ exports.searchCertificates = async (req, res) => {
         SELECT 
           user_certificate_id AS certificate_id,
           certificate_number,
+          original_number,
           fullname,
           cert_type AS certificate_title,
           issued_date,
@@ -302,7 +314,13 @@ exports.searchCertificates = async (req, res) => {
 
       query2 += ` ORDER BY ${
         safeSortBy === "certificate_title" ? "cert_type" : safeSortBy
-      } ${safeSortOrder}`;
+      } ${safeSortOrder} ${
+        safeSortBy === "expired_date"
+          ? safeSortOrder === "ASC"
+            ? "NULLS LAST"
+            : "NULLS FIRST"
+          : ""
+      }`;
 
       const cert2 = await client.query(query2, cert2Values);
       cert2WithStatus = cert2.rows.map((cert) => ({
@@ -317,6 +335,26 @@ exports.searchCertificates = async (req, res) => {
         : type === "2"
         ? cert2WithStatus
         : [...cert1WithStatus, ...cert2WithStatus];
+
+    if (!type) {
+      combined.sort((a, b) => {
+        const valueA = a[safeSortBy]
+          ? new Date(a[safeSortBy]).getTime()
+          : safeSortOrder === "ASC" || safeSortOrder === "asc"
+          ? Infinity
+          : -Infinity;
+
+        const valueB = b[safeSortBy]
+          ? new Date(b[safeSortBy]).getTime()
+          : safeSortOrder === "ASC" || safeSortOrder === "asc"
+          ? Infinity
+          : -Infinity;
+
+        return safeSortOrder === "ASC" || safeSortOrder === "asc"
+          ? valueA - valueB
+          : valueB - valueA;
+      });
+    }
 
     return sendSuccessResponse(res, "Certificates fetched", combined);
   } catch (err) {
@@ -400,6 +438,7 @@ exports.getCertificateByNumber = async (req, res) => {
       SELECT 
         uc.user_certificate_id AS certificate_id,
         uc.certificate_number,
+        uc.original_number,
         uc.fullname,
         uc.cert_type AS certificate_title,
         uc.issued_date,
@@ -411,7 +450,7 @@ exports.getCertificateByNumber = async (req, res) => {
         u.user_photo
       FROM user_certificates uc
       LEFT JOIN users u ON uc.user_id = u.user_id
-      WHERE uc.certificate_number = $1 AND uc.status = 2
+      WHERE (uc.certificate_number = $1 OR uc.original_number = $1) AND uc.status = 2
     `;
     const result2 = await client.query(query2, [number]);
 

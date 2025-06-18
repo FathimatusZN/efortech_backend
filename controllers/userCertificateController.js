@@ -26,6 +26,11 @@ const generateCustomId = (prefix) => {
   return `${prefix}-${timestamp}-${randomStr}`; // Format: PREFIX-YYYYMMDDHHMM-RANDOM
 };
 
+// Function to check if certificate number contains invalid characters (for URL : /?#&)
+const encodeCertificateNumber = (number) => {
+  return number.replace(/[^a-zA-Z0-9\-]/g, "_");
+};
+
 // Controller function to create user-uploaded certificate
 exports.createUserCertificate = async (req, res) => {
   const {
@@ -56,16 +61,17 @@ exports.createUserCertificate = async (req, res) => {
     await client.query("BEGIN"); // Start transaction
 
     const user_certificate_id = generateCustomId("UCRT");
+    const encodedNumber = encodeCertificateNumber(certificate_number);
 
     // Insert certificate data into user_certificates table
     await client.query(
       `INSERT INTO user_certificates (
           user_certificate_id, user_id, fullname, cert_type, issuer, 
-          issued_date, expired_date, certificate_number, cert_file, 
+          issued_date, expired_date, certificate_number, original_number, cert_file, 
           status, created_at
         ) VALUES (
           $1, $2, $3, $4, $5, 
-          $6, $7, $8, $9, 
+          $6, $7, $8, $9, $10,
           1, NOW()
         )`,
       [
@@ -76,7 +82,8 @@ exports.createUserCertificate = async (req, res) => {
         issuer,
         issued_date,
         expired_date || null,
-        certificate_number,
+        encodedNumber,
+        encodedNumber !== certificate_number ? certificate_number : null, // only save original if modified
         cert_file,
       ]
     );
@@ -131,16 +138,17 @@ exports.createUserCertificateByAdmin = async (req, res) => {
     await client.query("BEGIN");
 
     const user_certificate_id = generateCustomId("UCRT");
+    const encodedNumber = encodeCertificateNumber(certificate_number);
 
     await client.query(
       `INSERT INTO user_certificates (
           user_certificate_id, user_id, fullname, cert_type, issuer,
-          issued_date, expired_date, certificate_number, cert_file,
+          issued_date, expired_date, certificate_number, original_number, cert_file,
           status, created_at, verified_by, verification_date, notes
         ) VALUES (
           $1, $2, $3, $4, $5,
-          $6, $7, $8, $9,
-          2, NOW(), $10, NOW(), $11
+          $6, $7, $8, $9, $10,
+          2, NOW(), $11, NOW(), $12
         )`,
       [
         user_certificate_id,
@@ -150,7 +158,8 @@ exports.createUserCertificateByAdmin = async (req, res) => {
         issuer,
         issued_date,
         expired_date || null,
-        certificate_number,
+        encodedNumber,
+        encodedNumber !== certificate_number ? certificate_number : null,
         cert_file,
         admin_id,
         notes || null,
@@ -182,39 +191,96 @@ exports.updateUserCertificateStatus = async (req, res) => {
   const { user_certificate_id, status, admin_id, notes } = req.body;
 
   if (!status || !admin_id) {
-    return sendErrorResponse(res, "Status dan admin_id wajib diisi");
+    return sendErrorResponse(res, "Status and admin_id are required");
   }
 
   const client = await db.connect();
   try {
+    await client.query("BEGIN");
+
+    // Step 1: If updating to "Accepted", check for conflicts (duplicate accepted certificate_number)
+    if (status === 2) {
+      // Fetch certificate_number and original_number of the certificate to be updated
+      const certNumberResult = await client.query(
+        `
+        SELECT certificate_number, original_number
+        FROM user_certificates
+        WHERE user_certificate_id = $1
+      `,
+        [user_certificate_id]
+      );
+
+      if (certNumberResult.rowCount === 0) {
+        await client.query("ROLLBACK");
+        return sendErrorResponse(res, "Certificate not found");
+      }
+
+      const { certificate_number, original_number } = certNumberResult.rows[0];
+
+      // Check if another Accepted certificate exists with the same certificate_number or original_number
+      const conflictCheck = await client.query(
+        `
+        SELECT COUNT(*) 
+        FROM user_certificates
+        WHERE 
+          status = 2
+          AND user_certificate_id != $1
+          AND (
+            certificate_number = $2
+            OR original_number = $2
+            OR certificate_number = $3
+            OR original_number = $3
+          )
+      `,
+        [
+          user_certificate_id,
+          certificate_number,
+          original_number || certificate_number,
+        ]
+      );
+
+      if (parseInt(conflictCheck.rows[0].count) > 0) {
+        await client.query("ROLLBACK");
+        return sendErrorResponse(
+          res,
+          "Another certificate with this number has already been validated."
+        );
+      }
+    }
+
+    // Step 2: Proceed with updating status
     const query = `
-        UPDATE user_certificates
-        SET 
-          status = $1,
-          verified_by = $2,
-          notes = $3,
-          verification_date = NOW()
-        WHERE user_certificate_id = $4
-        RETURNING *;
-      `;
+      UPDATE user_certificates
+      SET 
+        status = $1,
+        verified_by = $2,
+        notes = $3,
+        verification_date = NOW()
+      WHERE user_certificate_id = $4
+      RETURNING *;
+    `;
 
     const values = [status, admin_id, notes || null, user_certificate_id];
     const result = await client.query(query, values);
 
     if (result.rowCount === 0) {
-      return sendErrorResponse(res, "Sertifikat tidak ditemukan");
+      await client.query("ROLLBACK");
+      return sendErrorResponse(res, "Certificate not found");
     }
+
+    await client.query("COMMIT");
 
     return sendSuccessResponse(
       res,
-      "Status sertifikat berhasil diperbarui",
+      "Certificate status updated successfully",
       result.rows[0]
     );
   } catch (err) {
-    console.error("Update status error:", err);
+    await client.query("ROLLBACK");
+    console.error("Update certificate status error:", err);
     return sendErrorResponse(
       res,
-      "Gagal memperbarui status sertifikat",
+      "Failed to update certificate status",
       err.message
     );
   } finally {
@@ -236,6 +302,7 @@ exports.getUserCertificates = async (req, res) => {
           uc.issued_date,
           uc.expired_date,
           uc.certificate_number,
+          uc.original_number,
           uc.cert_file,
           uc.status,
           uc.created_at,
@@ -292,6 +359,7 @@ exports.getUserCertificateById = async (req, res) => {
           uc.issued_date,
           uc.expired_date,
           uc.certificate_number,
+          uc.original_number,
           uc.cert_file,
           uc.status,
           uc.created_at,
@@ -340,6 +408,7 @@ exports.searchUserCertificates = async (req, res) => {
     issued_date,
     expired_date,
     certificate_number,
+    original_number,
     status,
     created_at,
     query,
@@ -354,6 +423,7 @@ exports.searchUserCertificates = async (req, res) => {
     "issued_date",
     "expired_date",
     "certificate_number",
+    "original_number",
     "status",
     "created_at",
   ];
@@ -396,6 +466,10 @@ exports.searchUserCertificates = async (req, res) => {
     );
     values.push(`%${certificate_number.toLowerCase()}%`);
   }
+  if (original_number) {
+    conditions.push(`LOWER(COALESCE(uc.original_number, '')) ILIKE $${idx++}`);
+    values.push(`%${original_number.toLowerCase()}%`);
+  }
   if (status) {
     const statusArray = Array.isArray(status) ? status : [status];
     const placeholders = statusArray.map(() => `$${idx++}`).join(", ");
@@ -412,7 +486,8 @@ exports.searchUserCertificates = async (req, res) => {
         CAST(uc.user_id AS TEXT) ILIKE $${idx} OR
         LOWER(COALESCE(u.fullname, uc.fullname)) ILIKE $${idx} OR
         LOWER(COALESCE(uc.cert_type, '')) ILIKE $${idx} OR
-        LOWER(COALESCE(uc.certificate_number, '')) ILIKE $${idx}
+        LOWER(COALESCE(uc.certificate_number, '')) ILIKE $${idx} OR
+        LOWER(COALESCE(uc.original_number, '')) ILIKE $${idx}
       )`);
     values.push(`%${query.toLowerCase()}%`);
     idx++;
@@ -434,6 +509,7 @@ exports.searchUserCertificates = async (req, res) => {
           uc.issued_date,
           uc.expired_date,
           uc.certificate_number,
+          uc.original_number,
           uc.cert_file,
           uc.status,
           uc.created_at,

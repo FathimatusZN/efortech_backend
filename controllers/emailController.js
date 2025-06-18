@@ -154,10 +154,12 @@ exports.previewUserUploadCertificateValidationEmail = async (req, res) => {
         u.email,
         uc.cert_type,
         uc.issued_date,
-        uc.expired_date
+        uc.expired_date,
+        uc.original_number,
+        uc.certificate_number
       FROM user_certificates uc
       JOIN users u ON uc.user_id = u.user_id
-      WHERE uc.certificate_number = $1 AND user_certificate_id = $2
+      WHERE (uc.certificate_number = $1 OR uc.original_number = $1) AND user_certificate_id = $2
     `;
 
     const { rows } = await db.query(query, [
@@ -184,6 +186,7 @@ exports.previewUserUploadCertificateValidationEmail = async (req, res) => {
         : "No Expiry Date",
       status: getStatusText(status),
       notes,
+      originalNumber: rows[0].original_number || rows[0].certificate_number,
     });
 
     return sendSuccessResponse(res, "Preview generated", {
@@ -208,10 +211,12 @@ exports.sendUserUploadCertificateValidationEmail = async (req, res) => {
         u.email,
         uc.cert_type,
         uc.issued_date,
-        uc.expired_date
+        uc.expired_date,
+        uc.original_number,
+        uc.certificate_number
       FROM user_certificates uc
       JOIN users u ON uc.user_id = u.user_id
-      WHERE uc.certificate_number = $1 AND user_certificate_id = $2
+      WHERE (uc.certificate_number = $1 OR uc.original_number = $1) AND user_certificate_id = $2
     `;
 
     const { rows } = await db.query(query, [
@@ -238,6 +243,7 @@ exports.sendUserUploadCertificateValidationEmail = async (req, res) => {
         : "No Expiry Date",
       status: getStatusText(status),
       notes,
+      originalNumber: rows[0].original_number || rows[0].certificate_number,
     });
 
     const info = await sendEmail({ to: email, subject, html });
