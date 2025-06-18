@@ -49,6 +49,7 @@ exports.getAllCertificates = async (req, res) => {
       SELECT 
         user_certificate_id AS certificate_id,
         certificate_number,
+        original_number,
         fullname,
         cert_type AS certificate_title,
         issued_date,
@@ -261,7 +262,9 @@ exports.searchCertificates = async (req, res) => {
       if (q) {
         const search = `%${q}%`;
         cert2Conditions.push(`(
-          certificate_number ILIKE $${cert2Values.length + 1} OR
+          COALESCE(original_number, certificate_number) ILIKE $${
+            cert2Values.length + 1
+          } OR
           fullname ILIKE $${cert2Values.length + 2} OR
           cert_type ILIKE $${cert2Values.length + 3} OR
           CAST(issued_date AS TEXT) ILIKE $${cert2Values.length + 4} OR
@@ -286,6 +289,7 @@ exports.searchCertificates = async (req, res) => {
         SELECT 
           user_certificate_id AS certificate_id,
           certificate_number,
+          original_number,
           fullname,
           cert_type AS certificate_title,
           issued_date,
@@ -400,6 +404,7 @@ exports.getCertificateByNumber = async (req, res) => {
       SELECT 
         uc.user_certificate_id AS certificate_id,
         uc.certificate_number,
+        uc.original_number,
         uc.fullname,
         uc.cert_type AS certificate_title,
         uc.issued_date,
@@ -411,7 +416,7 @@ exports.getCertificateByNumber = async (req, res) => {
         u.user_photo
       FROM user_certificates uc
       LEFT JOIN users u ON uc.user_id = u.user_id
-      WHERE uc.certificate_number = $1 AND uc.status = 2
+      WHERE (uc.certificate_number = $1 OR uc.original_number = $1) AND uc.status = 2
     `;
     const result2 = await client.query(query2, [number]);
 
