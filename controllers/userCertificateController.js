@@ -191,39 +191,96 @@ exports.updateUserCertificateStatus = async (req, res) => {
   const { user_certificate_id, status, admin_id, notes } = req.body;
 
   if (!status || !admin_id) {
-    return sendErrorResponse(res, "Status dan admin_id wajib diisi");
+    return sendErrorResponse(res, "Status and admin_id are required");
   }
 
   const client = await db.connect();
   try {
+    await client.query("BEGIN");
+
+    // Step 1: If updating to "Accepted", check for conflicts (duplicate accepted certificate_number)
+    if (status === 2) {
+      // Fetch certificate_number and original_number of the certificate to be updated
+      const certNumberResult = await client.query(
+        `
+        SELECT certificate_number, original_number
+        FROM user_certificates
+        WHERE user_certificate_id = $1
+      `,
+        [user_certificate_id]
+      );
+
+      if (certNumberResult.rowCount === 0) {
+        await client.query("ROLLBACK");
+        return sendErrorResponse(res, "Certificate not found");
+      }
+
+      const { certificate_number, original_number } = certNumberResult.rows[0];
+
+      // Check if another Accepted certificate exists with the same certificate_number or original_number
+      const conflictCheck = await client.query(
+        `
+        SELECT COUNT(*) 
+        FROM user_certificates
+        WHERE 
+          status = 2
+          AND user_certificate_id != $1
+          AND (
+            certificate_number = $2
+            OR original_number = $2
+            OR certificate_number = $3
+            OR original_number = $3
+          )
+      `,
+        [
+          user_certificate_id,
+          certificate_number,
+          original_number || certificate_number,
+        ]
+      );
+
+      if (parseInt(conflictCheck.rows[0].count) > 0) {
+        await client.query("ROLLBACK");
+        return sendErrorResponse(
+          res,
+          "Another certificate with this number has already been validated."
+        );
+      }
+    }
+
+    // Step 2: Proceed with updating status
     const query = `
-        UPDATE user_certificates
-        SET 
-          status = $1,
-          verified_by = $2,
-          notes = $3,
-          verification_date = NOW()
-        WHERE user_certificate_id = $4
-        RETURNING *;
-      `;
+      UPDATE user_certificates
+      SET 
+        status = $1,
+        verified_by = $2,
+        notes = $3,
+        verification_date = NOW()
+      WHERE user_certificate_id = $4
+      RETURNING *;
+    `;
 
     const values = [status, admin_id, notes || null, user_certificate_id];
     const result = await client.query(query, values);
 
     if (result.rowCount === 0) {
-      return sendErrorResponse(res, "Sertifikat tidak ditemukan");
+      await client.query("ROLLBACK");
+      return sendErrorResponse(res, "Certificate not found");
     }
+
+    await client.query("COMMIT");
 
     return sendSuccessResponse(
       res,
-      "Status sertifikat berhasil diperbarui",
+      "Certificate status updated successfully",
       result.rows[0]
     );
   } catch (err) {
-    console.error("Update status error:", err);
+    await client.query("ROLLBACK");
+    console.error("Update certificate status error:", err);
     return sendErrorResponse(
       res,
-      "Gagal memperbarui status sertifikat",
+      "Failed to update certificate status",
       err.message
     );
   } finally {
