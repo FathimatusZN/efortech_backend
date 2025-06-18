@@ -16,6 +16,7 @@ const sendEmail = async ({ to, subject, html }) => {
     to,
     subject,
     html,
+    bcc: process.env.EMAIL_USER,
   };
 
   return transporter.sendMail(mailOptions);
