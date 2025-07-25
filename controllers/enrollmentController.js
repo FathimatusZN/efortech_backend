@@ -398,6 +398,7 @@ exports.getUserTrainingHistory = async (req, res) => {
           u.email,
           u.user_photo,
           rp.registration_participant_id,
+          rp.attendance_status,
           -- Use EXISTS to check if a review exists for the given registration_participant_id
           EXISTS (
             SELECT 1 FROM review v 
