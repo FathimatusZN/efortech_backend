@@ -444,3 +444,47 @@ exports.getUserTrainingHistory = async (req, res) => {
     client.release();
   }
 };
+
+// Update the Advantech certificate link for a participant
+exports.updateAdvantechCertificate = async (req, res) => {
+  const { registration_participant_id, fileUrl } = req.body;
+
+  if (!registration_participant_id || !fileUrl) {
+    return sendBadRequestResponse(
+      res,
+      "registration_participant_id and fileUrl are required."
+    );
+  }
+
+  try {
+    // Check if the participant exists
+    const checkRes = await db.query(
+      `SELECT * FROM registration_participant WHERE registration_participant_id = $1`,
+      [registration_participant_id]
+    );
+
+    if (checkRes.rows.length === 0) {
+      return sendBadRequestResponse(res, "Participant not found.");
+    }
+
+    // Update the Advantech certificate link
+    await db.query(
+      `UPDATE registration_participant
+       SET advantech_cert = $1
+       WHERE registration_participant_id = $2`,
+      [fileUrl, registration_participant_id]
+    );
+
+    return sendSuccessResponse(
+      res,
+      "Advantech certificate link updated successfully."
+    );
+  } catch (err) {
+    console.error("Error updating advantech_cert:", err);
+    return sendErrorResponse(
+      res,
+      "Failed to update Advantech certificate link.",
+      err.message
+    );
+  }
+};
