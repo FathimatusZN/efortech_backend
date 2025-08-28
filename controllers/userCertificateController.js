@@ -72,9 +72,14 @@ const processCertificateNumber = async (certificate_number, client) => {
   let finalCertNumber = certificate_number;
   let originalNumber = null;
 
-  if (certificate_number === "-" || certificate_number.length <= 2) {
+  // normalize input -> string, trim space, remove quotes mark
+  const normalized = String(certificate_number)
+    .trim()
+    .replace(/^['"]|['"]$/g, "");
+
+  if (normalized === "-" || normalized.length <= 2) {
     finalCertNumber = await generateUniqueCertificateNumber(client);
-    originalNumber = certificate_number;
+    originalNumber = "-";
   } else {
     const encodedNumber = encodeCertificateNumber(certificate_number);
     finalCertNumber = encodedNumber;
