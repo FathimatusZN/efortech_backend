@@ -212,3 +212,88 @@ exports.searchUserByEmail = async (req, res) => {
     return sendErrorResponse(res, "Unexpected server error");
   }
 };
+
+// Get all users (with optional filters and sorting)
+exports.getAllUsers = async (req, res) => {
+  try {
+    const {
+      user_id,
+      email,
+      fullname,
+      role_id,
+      institution,
+      sort_by = "created_at", // default sort by created_at
+      order = "desc", // default sort desc
+    } = req.query;
+
+    // allowed sort_by column
+    const allowedSortFields = [
+      "user_id",
+      "fullname",
+      "email",
+      "phone_number",
+      "institution",
+      "gender",
+      "birthdate",
+      "role_id",
+      "created_at",
+    ];
+    const allowedOrder = ["asc", "desc"];
+
+    const sortField = allowedSortFields.includes(sort_by)
+      ? sort_by
+      : "created_at";
+    const sortOrder = allowedOrder.includes(order.toLowerCase())
+      ? order.toUpperCase()
+      : "DESC";
+
+    // base query
+    let query = `
+      SELECT u.user_id, u.fullname, u.email, u.phone_number, 
+             u.institution, u.gender, u.birthdate, u.user_photo, 
+             u.created_at, u.role_id, r.role_desc
+      FROM users u
+      JOIN roles r ON u.role_id = r.role_id
+      WHERE 1=1
+    `;
+
+    const values = [];
+    let paramIndex = 1;
+
+    // filter optional
+    if (user_id) {
+      query += ` AND u.user_id = $${paramIndex++}`;
+      values.push(user_id);
+    }
+
+    if (email) {
+      query += ` AND u.email ILIKE $${paramIndex++}`;
+      values.push(`%${email}%`);
+    }
+
+    if (fullname) {
+      query += ` AND u.fullname ILIKE $${paramIndex++}`;
+      values.push(`%${fullname}%`);
+    }
+
+    if (role_id) {
+      query += ` AND u.role_id = $${paramIndex++}`;
+      values.push(role_id);
+    }
+
+    if (institution) {
+      query += ` AND u.institution ILIKE $${paramIndex++}`;
+      values.push(`%${institution}%`);
+    }
+
+    // add sorting
+    query += ` ORDER BY u.${sortField} ${sortOrder}`;
+
+    const result = await db.query(query, values);
+
+    return sendSuccessResponse(res, "Users fetched successfully", result.rows);
+  } catch (error) {
+    console.error("Error fetching users:", error);
+    return sendErrorResponse(res, "Failed to fetch users");
+  }
+};
