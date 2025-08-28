@@ -230,7 +230,7 @@ exports.getAdmins = async (req, res) => {
   };
 
   let query = `
-    SELECT a.admin_id, u.fullname, u.email, u.role_id, a.created_date, a.last_updated, a.status
+    SELECT a.admin_id, u.fullname, u.email, u.role_id, u.phone_number, u.institution, u.gender, u.birthdate, u.user_photo, a.created_date, a.last_updated, a.status
     FROM admin a
     JOIN users u ON a.admin_id = u.user_id
     WHERE 1=1
@@ -302,7 +302,7 @@ exports.getAdminById = async (req, res) => {
 
   try {
     const result = await db.query(
-      `SELECT u.user_id, u.fullname, u.email, u.role_id, a.created_date, a.last_updated, a.status
+      `SELECT u.user_id, u.fullname, u.email, u.role_id, u.phone_number, u.institution, u.gender, u.birthdate, u.user_photo, a.created_date, a.last_updated, a.status
        FROM admin a
        JOIN users u ON a.admin_id = u.user_id
        WHERE u.user_id = $1`,
