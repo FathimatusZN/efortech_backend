@@ -5,8 +5,9 @@ const {
   updateUserProfile,
   searchUserByEmail,
   getUserProfileNoToken,
+  getAllUsers,
 } = require("../controllers/userController");
-const verifyToken = require("../middlewares/authMiddleware");
+const { verifyToken, verifyRoles } = require("../middlewares/authMiddleware");
 const uploadFile = require("../middlewares/imageUpload");
 const {
   sendSuccessResponse,
@@ -17,6 +18,12 @@ const router = express.Router();
 
 // GET - User profile route
 router.get("/me", verifyToken, getUserProfile);
+
+// GET - User List
+router.get("/listttt", getAllUsers);
+
+// GET - User List
+router.get("/list", verifyToken, verifyRoles(["role2", "role3"]), getAllUsers);
 
 // GET - Search User by Email
 router.get("/search", searchUserByEmail);
