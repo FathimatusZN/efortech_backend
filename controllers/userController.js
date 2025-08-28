@@ -291,7 +291,40 @@ exports.getAllUsers = async (req, res) => {
 
     const result = await db.query(query, values);
 
-    return sendSuccessResponse(res, "Users fetched successfully", result.rows);
+    // formatter
+    const formatWIB = (dateStr) => {
+      if (!dateStr) return null;
+      return new Intl.DateTimeFormat("id-ID", {
+        timeZone: "Asia/Jakarta",
+        dateStyle: "short",
+        timeStyle: "medium",
+        hour12: true,
+      }).format(new Date(dateStr));
+    };
+
+    // enrich with last login from Firebase
+    const enrichedUsers = await Promise.all(
+      result.rows.map(async (user) => {
+        let lastLogin = null;
+        try {
+          const fbUser = await getAuth().getUser(user.user_id);
+          lastLogin = fbUser.metadata.lastSignInTime;
+        } catch (err) {
+          console.warn(`Firebase error for ${user.user_id}:`, err.message);
+        }
+
+        return {
+          ...user,
+          last_login: formatWIB(lastLogin),
+        };
+      })
+    );
+
+    return sendSuccessResponse(
+      res,
+      "Users fetched successfully",
+      enrichedUsers
+    );
   } catch (error) {
     console.error("Error fetching users:", error);
     return sendErrorResponse(res, "Failed to fetch users");
