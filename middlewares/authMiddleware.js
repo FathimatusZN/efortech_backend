@@ -29,7 +29,7 @@ const verifyRoles = (allowedRoles = []) => {
       const userId = req.user.uid;
 
       const result = await db.query(
-        `SELECT r.role_desc
+        `SELECT r.role_id
          FROM users u
          JOIN roles r ON u.role_id = r.role_id
          WHERE u.user_id = $1`,
