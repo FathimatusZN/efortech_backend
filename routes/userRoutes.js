@@ -20,9 +20,6 @@ const router = express.Router();
 router.get("/me", verifyToken, getUserProfile);
 
 // GET - User List
-router.get("/listttt", getAllUsers);
-
-// GET - User List
 router.get("/list", verifyToken, verifyRoles(["role2", "role3"]), getAllUsers);
 
 // GET - Search User by Email
