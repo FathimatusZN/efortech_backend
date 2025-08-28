@@ -1,5 +1,6 @@
 const admin = require("firebase-admin");
 const { getAuth } = require("firebase-admin/auth");
+const db = require("../config/db");
 const {
   sendBadRequestResponse,
   sendUnauthorizedResponse,
@@ -40,7 +41,7 @@ const verifyRoles = (allowedRoles = []) => {
         return sendUnauthorizedResponse(res, "Unauthorized: User not found");
       }
 
-      const role = result.rows[0].role_desc;
+      const role = result.rows[0].role_id;
 
       if (!allowedRoles.includes(role)) {
         return sendUnauthorizedResponse(res, "Unauthorized: Insufficient role");
