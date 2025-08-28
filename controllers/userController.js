@@ -222,6 +222,7 @@ exports.getAllUsers = async (req, res) => {
       fullname,
       role_id,
       institution,
+      searchQuery,
       sort_by = "created_at", // default sort by created_at
       order = "desc", // default sort desc
     } = req.query;
@@ -284,6 +285,12 @@ exports.getAllUsers = async (req, res) => {
     if (institution) {
       query += ` AND u.institution ILIKE $${paramIndex++}`;
       values.push(`%${institution}%`);
+    }
+
+    if (searchQuery) {
+      query += ` AND (u.fullname ILIKE $${paramIndex} OR u.email ILIKE $${paramIndex} OR u.institution ILIKE $${paramIndex})`;
+      values.push(`%${searchQuery}%`);
+      paramIndex++;
     }
 
     // add sorting
