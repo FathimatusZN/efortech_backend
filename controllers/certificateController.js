@@ -215,12 +215,7 @@ exports.updateCertificate = async (req, res) => {
   } = req.body;
 
   // Validate required input
-  if (
-    !certificate_id ||
-    !registration_participant_id ||
-    !issued_date ||
-    !cert_file
-  ) {
+  if (!certificate_id || !registration_participant_id || !issued_date) {
     return sendBadRequestResponse(res, "All required fields must be complete");
   }
 
@@ -245,7 +240,7 @@ exports.updateCertificate = async (req, res) => {
        SET 
          issued_date = COALESCE($1, issued_date),
          expired_date = COALESCE($2, expired_date),
-         cert_file = COALESCE($3, cert_file)
+         cert_file = COALESCE(NULLIF($3, ''), cert_file)
        WHERE certificate_id = $4 AND registration_participant_id = $5`,
       [
         issued_date,
