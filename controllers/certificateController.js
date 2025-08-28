@@ -154,10 +154,12 @@ exports.createCertificate = async (req, res) => {
       ]
     );
 
-    await client.query(
-      "UPDATE registration_participant SET has_certificate= true WHERE registration_participant_id = $1",
-      [registration_participant_id]
-    );
+    if (cert_file) {
+      await client.query(
+        "UPDATE registration_participant SET has_certificate = true WHERE registration_participant_id = $1",
+        [registration_participant_id]
+      );
+    }
 
     // Get registration_id and training_id
     const regRes = await client.query(
@@ -255,12 +257,14 @@ exports.updateCertificate = async (req, res) => {
     );
 
     // Ensure has_certificate is true
-    await client.query(
-      `UPDATE registration_participant 
-       SET has_certificate = true 
-       WHERE registration_participant_id = $1`,
-      [registration_participant_id]
-    );
+    if (cert_file) {
+      await client.query(
+        `UPDATE registration_participant 
+     SET has_certificate = true 
+     WHERE registration_participant_id = $1`,
+        [registration_participant_id]
+      );
+    }
 
     // Get training_id for graduates recalculation
     const trainingRes = await client.query(
