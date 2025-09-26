@@ -30,6 +30,7 @@ exports.addTraining = async (req, res) => {
       level,
       status,
       admin_id,
+      available_date,
     } = req.body;
 
     const parsedSkills = Array.isArray(req.body.skills) ? req.body.skills : [];
@@ -78,8 +79,8 @@ exports.addTraining = async (req, res) => {
       : [];
 
     await db.query(
-      `INSERT INTO training (training_id, training_name, description, duration, training_fees, discount, validity_period, term_condition, level, status, skills, images, created_by, created_date)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CURRENT_TIMESTAMP)`,
+      `INSERT INTO training (training_id, training_name, description, duration, training_fees, discount, validity_period, available_date, term_condition, level, status, skills, images, created_by, created_date)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, CURRENT_TIMESTAMP)`,
       [
         training_id,
         training_name,
@@ -88,6 +89,7 @@ exports.addTraining = async (req, res) => {
         training_fees,
         discount,
         validity_period,
+        available_date,
         term_condition,
         level,
         status,
@@ -120,6 +122,7 @@ exports.updateTraining = async (req, res) => {
       status,
       skills,
       images,
+      available_date,
     } = req.body;
 
     if (
@@ -149,7 +152,7 @@ exports.updateTraining = async (req, res) => {
       : [];
 
     const result = await db.query(
-      `UPDATE training SET training_name = $1, description = $2, duration = $3, training_fees = $4, discount = $5, validity_period = $6, term_condition = $7, level = $8, status = $9, skills = $10, images = $11 WHERE training_id = $12`,
+      `UPDATE training SET training_name = $1, description = $2, duration = $3, training_fees = $4, discount = $5, validity_period = $6, available_date = $7, term_condition = $8, level = $9, status = $10, skills = $11, images = $12 WHERE training_id = $13`,
       [
         training_name,
         description,
@@ -157,6 +160,7 @@ exports.updateTraining = async (req, res) => {
         training_fees,
         discount,
         validity_period,
+        available_date,
         term_condition,
         level,
         status,

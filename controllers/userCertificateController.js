@@ -31,6 +31,66 @@ const encodeCertificateNumber = (number) => {
   return number.replace(/[^a-zA-Z0-9\-]/g, "_");
 };
 
+// Function to generate random certificate number (10 chars uppercase + digits)
+const generateRandomCertNumber = () => {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let result = "";
+  for (let i = 0; i < 10; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+};
+
+// Function to ensure uniqueness of generated cert number
+const generateUniqueCertificateNumber = async (client) => {
+  let unique = false;
+  let randomNumber;
+
+  while (!unique) {
+    randomNumber = generateRandomCertNumber();
+
+    const check = await client.query(
+      `
+      SELECT 1 FROM user_certificates WHERE certificate_number = $1
+      UNION
+      SELECT 1 FROM certificate WHERE certificate_number = $1
+      LIMIT 1
+      `,
+      [randomNumber]
+    );
+
+    if (check.rowCount === 0) {
+      unique = true;
+    }
+  }
+
+  return randomNumber;
+};
+
+// Helper function to process certificate number input
+const processCertificateNumber = async (certificate_number, client) => {
+  let finalCertNumber = certificate_number;
+  let originalNumber = null;
+
+  // normalize input -> string, trim space, remove quotes mark
+  const normalized = String(certificate_number)
+    .trim()
+    .replace(/^['"]|['"]$/g, "");
+
+  if (normalized === "-" || normalized.length <= 2) {
+    finalCertNumber = await generateUniqueCertificateNumber(client);
+    originalNumber = "-";
+  } else {
+    const encodedNumber = encodeCertificateNumber(certificate_number);
+    finalCertNumber = encodedNumber;
+    if (encodedNumber !== certificate_number) {
+      originalNumber = certificate_number;
+    }
+  }
+
+  return { finalCertNumber, originalNumber };
+};
+
 // Controller function to create user-uploaded certificate
 exports.createUserCertificate = async (req, res) => {
   const {
@@ -61,7 +121,10 @@ exports.createUserCertificate = async (req, res) => {
     await client.query("BEGIN"); // Start transaction
 
     const user_certificate_id = generateCustomId("UCRT");
-    const encodedNumber = encodeCertificateNumber(certificate_number);
+    const { finalCertNumber, originalNumber } = await processCertificateNumber(
+      certificate_number,
+      client
+    );
 
     // Insert certificate data into user_certificates table
     await client.query(
@@ -82,8 +145,8 @@ exports.createUserCertificate = async (req, res) => {
         issuer,
         issued_date,
         expired_date || null,
-        encodedNumber,
-        encodedNumber !== certificate_number ? certificate_number : null, // only save original if modified
+        finalCertNumber,
+        originalNumber,
         cert_file,
       ]
     );
@@ -138,7 +201,10 @@ exports.createUserCertificateByAdmin = async (req, res) => {
     await client.query("BEGIN");
 
     const user_certificate_id = generateCustomId("UCRT");
-    const encodedNumber = encodeCertificateNumber(certificate_number);
+    const { finalCertNumber, originalNumber } = await processCertificateNumber(
+      certificate_number,
+      client
+    );
 
     await client.query(
       `INSERT INTO user_certificates (
@@ -158,8 +224,8 @@ exports.createUserCertificateByAdmin = async (req, res) => {
         issuer,
         issued_date,
         expired_date || null,
-        encodedNumber,
-        encodedNumber !== certificate_number ? certificate_number : null,
+        finalCertNumber,
+        originalNumber,
         cert_file,
         admin_id,
         notes || null,
