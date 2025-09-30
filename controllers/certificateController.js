@@ -220,7 +220,7 @@ exports.updateCertificate = async (req, res) => {
   }
 
   // Normalisasi expired_date
-  if (expired_date === "") {
+  if (!expired_date || expired_date.trim() === "") {
     expired_date = null;
   }
 
