@@ -1,5 +1,6 @@
 const certificateIssuedTemplate = ({
   userName,
+  registration_participant_id,
   certificateNumber,
   trainingName,
   issuedDate,
@@ -26,9 +27,9 @@ const certificateIssuedTemplate = ({
         </table>
 
         <br/>
-        <p>You can download your certificate using the following link:<br/>
-        <a href="https://edu.efortechsolutions.com/certificate/${certificateNumber}" target="_blank" style="color: #1a73e8; font-weight: bold; font-style: italic;">
-          https://edu.efortechsolutions.com/certificate/${certificateNumber}
+        <p>You can check your certificate using the following link:<br/>
+        <a href="https://edu.efortechsolutions.com/edit-profile/review/${registration_participant_id}" target="_blank" style="color: #1a73e8; font-weight: bold; font-style: italic;">
+          https://edu.efortechsolutions.com/edit-profile/review/${registration_participant_id}
         </a></p>
 
         <p>We sincerely thank you for your active participation and commitment throughout the training.</p>

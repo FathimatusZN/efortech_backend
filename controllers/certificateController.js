@@ -104,7 +104,6 @@ exports.createCertificate = async (req, res) => {
   // Basic validation for required fields
   if (
     !issued_date ||
-    !expired_date ||
     !certificate_number ||
     !cert_file ||
     !registration_participant_id
@@ -209,14 +208,20 @@ exports.updateCertificate = async (req, res) => {
   const {
     certificate_id,
     issued_date,
-    expired_date,
     cert_file,
     registration_participant_id,
   } = req.body;
 
+  let { expired_date } = req.body;
+
   // Validate required input
   if (!certificate_id || !registration_participant_id || !issued_date) {
     return sendBadRequestResponse(res, "All required fields must be complete");
+  }
+
+  // Normalisasi expired_date
+  if (!expired_date || expired_date.trim() === "") {
+    expired_date = null;
   }
 
   const client = await db.connect();
@@ -239,7 +244,7 @@ exports.updateCertificate = async (req, res) => {
       `UPDATE certificate 
        SET 
          issued_date = COALESCE($1, issued_date),
-         expired_date = COALESCE($2, expired_date),
+         expired_date = $2,
          cert_file = COALESCE(NULLIF($3, ''), cert_file)
        WHERE certificate_id = $4 AND registration_participant_id = $5`,
       [
@@ -460,6 +465,7 @@ exports.searchCertificates = async (req, res) => {
     const {
       training_name,
       certificate_number,
+      registration_participant_id,
       fullname,
       issued_date,
       expired_date,
@@ -535,6 +541,7 @@ exports.searchCertificates = async (req, res) => {
       baseQuery += ` AND (
         LOWER(u.fullname) LIKE $${paramIndex}
         OR LOWER(c.certificate_number) LIKE $${paramIndex}
+        OR LOWER(c.registration_participant_id) LIKE $${paramIndex}
         OR LOWER(t.training_name) LIKE $${paramIndex}
         OR LOWER(CAST(c.issued_date AS TEXT)) LIKE $${paramIndex}
         OR LOWER(CAST(c.expired_date AS TEXT)) LIKE $${paramIndex}
@@ -554,6 +561,13 @@ exports.searchCertificates = async (req, res) => {
     if (certificate_number) {
       baseQuery += ` AND LOWER(c.certificate_number) LIKE LOWER($${paramIndex})`;
       queryParams.push(`%${certificate_number}%`);
+      paramIndex++;
+    }
+
+    // Search by registration_participant_id (partial match)
+    if (registration_participant_id) {
+      baseQuery += ` AND LOWER(c.registration_participant_id) LIKE LOWER($${paramIndex})`;
+      queryParams.push(`%${registration_participant_id}%`);
       paramIndex++;
     }
 
