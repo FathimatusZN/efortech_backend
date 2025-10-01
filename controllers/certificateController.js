@@ -465,6 +465,7 @@ exports.searchCertificates = async (req, res) => {
     const {
       training_name,
       certificate_number,
+      registration_participant_id,
       fullname,
       issued_date,
       expired_date,
@@ -540,6 +541,7 @@ exports.searchCertificates = async (req, res) => {
       baseQuery += ` AND (
         LOWER(u.fullname) LIKE $${paramIndex}
         OR LOWER(c.certificate_number) LIKE $${paramIndex}
+        OR LOWER(c.registration_participant_id) LIKE $${paramIndex}
         OR LOWER(t.training_name) LIKE $${paramIndex}
         OR LOWER(CAST(c.issued_date AS TEXT)) LIKE $${paramIndex}
         OR LOWER(CAST(c.expired_date AS TEXT)) LIKE $${paramIndex}
@@ -559,6 +561,13 @@ exports.searchCertificates = async (req, res) => {
     if (certificate_number) {
       baseQuery += ` AND LOWER(c.certificate_number) LIKE LOWER($${paramIndex})`;
       queryParams.push(`%${certificate_number}%`);
+      paramIndex++;
+    }
+
+    // Search by registration_participant_id (partial match)
+    if (registration_participant_id) {
+      baseQuery += ` AND LOWER(c.registration_participant_id) LIKE LOWER($${paramIndex})`;
+      queryParams.push(`%${registration_participant_id}%`);
       paramIndex++;
     }
 
