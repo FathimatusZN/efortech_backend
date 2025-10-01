@@ -58,6 +58,7 @@ exports.previewTrainingCertificateEmail = async (req, res) => {
 
     const { subject, html } = certificateIssuedTemplate({
       userName: participant_name,
+      registration_participant_id: registration_participant_id,
       certificateNumber: certificate_number,
       trainingName: training_name,
       issuedDate: issued_date,
@@ -95,6 +96,7 @@ exports.sendTrainingCertificateEmail = async (req, res) => {
           c.certificate_number,
           c.issued_date,
           c.expired_date,
+          c.registration_participant_id,
           u.fullname AS participant_name,
           u.email,
           t.training_name
@@ -114,6 +116,7 @@ exports.sendTrainingCertificateEmail = async (req, res) => {
 
     const {
       participant_name,
+      registration_participant_id,
       email,
       training_name,
       issued_date,
@@ -122,6 +125,7 @@ exports.sendTrainingCertificateEmail = async (req, res) => {
 
     const { subject, html } = certificateIssuedTemplate({
       userName: participant_name,
+      registration_participant_id: registration_participant_id,
       certificateNumber: certificate_number,
       trainingName: training_name,
       issuedDate: issued_date.toISOString().split("T")[0],
