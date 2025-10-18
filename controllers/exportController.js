@@ -736,3 +736,141 @@ exports.exportRegistrationsCompleted = async (req, res) => {
     client.release();
   }
 };
+
+// Export Registration Training (Cancelled)
+exports.exportRegistrationsCancelled = async (req, res) => {
+  const {
+    start,
+    end,
+    dateType = "registration_date", // registration_date / training_date
+    training_id,
+  } = req.query;
+
+  const client = await db.connect();
+  try {
+    // Validate dateType
+    if (!["registration_date", "training_date"].includes(dateType)) {
+      return sendBadRequestResponse(res, "Invalid date type filter.");
+    }
+
+    // Build base query (status fixed = 5)
+    const values = [5];
+    let index = 2;
+
+    let query = `
+      SELECT 
+        r.registration_id,
+        r.registrant_id,
+        u.fullname AS registrant_name,
+        u.phone_number,
+        u.email,
+        r.training_id,
+        t.training_name,
+        r.registration_date,
+        r.training_date,
+        r.total_payment,
+        r.status,
+        r.participant_count,
+        r.payment_proof
+      FROM registration r
+      JOIN users u ON r.registrant_id = u.user_id
+      JOIN training t ON r.training_id = t.training_id
+      WHERE r.status = $1
+    `;
+
+    // Filter by date
+    if (start && end) {
+      query += ` AND r.${dateType} BETWEEN $${index} AND $${index + 1}`;
+      values.push(start, end);
+      index += 2;
+    }
+
+    // Filter by training_id
+    if (training_id) {
+      query += ` AND r.training_id = $${index}`;
+      values.push(training_id);
+      index++;
+    }
+
+    // Sort by date
+    query += ` ORDER BY r.${dateType} DESC`;
+
+    const result = await client.query(query, values);
+
+    if (result.rows.length === 0) {
+      return sendBadRequestResponse(
+        res,
+        "No cancelled registration data found for export."
+      );
+    }
+
+    // Format date & set status label
+    const formattedRows = result.rows.map((row) => ({
+      ...row,
+      registration_date: formatDateToWIB(row.registration_date),
+      training_date: formatDateToWIB(row.training_date),
+      status: "Cancelled",
+    }));
+
+    // Create Excel workbook
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Cancelled Registrations");
+
+    worksheet.columns = [
+      { header: "Registration ID", key: "registration_id", width: 25 },
+      { header: "Registrant Name", key: "registrant_name", width: 25 },
+      { header: "Phone Number", key: "phone_number", width: 18 },
+      { header: "Email", key: "email", width: 28 },
+      { header: "Training ID", key: "training_id", width: 22 },
+      { header: "Training Name", key: "training_name", width: 30 },
+      { header: "Registration Date", key: "registration_date", width: 22 },
+      { header: "Training Date", key: "training_date", width: 22 },
+      { header: "Total Payment", key: "total_payment", width: 18 },
+      { header: "Status", key: "status", width: 20 },
+      { header: "Participant Count", key: "participant_count", width: 20 },
+      { header: "Payment Proof", key: "payment_proof", width: 30 },
+    ];
+
+    worksheet.addRows(formattedRows);
+
+    // Style header & border
+    const headerRow = worksheet.getRow(1);
+    headerRow.font = { bold: true };
+    headerRow.alignment = { vertical: "middle", horizontal: "center" };
+
+    worksheet.eachRow((row) => {
+      worksheet.columns.forEach((_, colIndex) => {
+        const cell = row.getCell(colIndex + 1);
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        };
+      });
+      row.height = 20;
+    });
+
+    // Send Excel file
+    const buffer = await workbook.xlsx.writeBuffer();
+    const timestamp = generateTimestampWIB();
+    const filename = `registraining_export_cancelled_${timestamp}.xlsx`;
+
+    res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader("Content-Length", buffer.length);
+    res.send(buffer);
+  } catch (err) {
+    console.error("Error exporting registrations (cancelled):", err);
+    res.status(500).json({
+      message: "Failed to export registration data (cancelled)",
+      error: err.message,
+    });
+  } finally {
+    client.release();
+  }
+};
