@@ -4,6 +4,7 @@ const {
   exportUsers,
   exportRegistrationsNeedProcess,
   exportRegistrationsOnProgress,
+  exportRegistrationsCompleted,
 } = require("../controllers/exportController");
 
 // GET /api/export - Export user data (all/custom)
@@ -14,5 +15,8 @@ router.get("/registrations/needprocess", exportRegistrationsNeedProcess);
 
 // GET /api/export/registrations/onprogress - Export registration training data (status 4, attendance_status = null or true)
 router.get("/registrations/onprogress", exportRegistrationsOnProgress);
+
+// GET /api/export/registrations/completed - Export registration training data (status 4, attendance_status = true or false)
+router.get("/registrations/completed", exportRegistrationsCompleted);
 
 module.exports = router;
