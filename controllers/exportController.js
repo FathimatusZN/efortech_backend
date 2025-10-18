@@ -81,9 +81,10 @@ exports.exportUsers = async (req, res) => {
     // Apply role filter
     if (roles) {
       const roleArray = roles.split(",").map((r) => r.trim());
-      query += ` AND u.role_id = ANY($${index})`;
-      values.push(roleArray);
-      index++;
+      const placeholders = roleArray.map((_, i) => `$${index + i}`).join(", ");
+      query += ` AND u.role_id IN (${placeholders})`;
+      values.push(...roleArray);
+      index += roleArray.length;
     }
 
     query += ` ORDER BY u.created_at DESC`;
