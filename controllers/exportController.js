@@ -183,6 +183,14 @@ exports.exportRegistrationsNeedProcess = async (req, res) => {
       return sendBadRequestResponse(res, "Invalid date type filter.");
     }
 
+    // Build parameter array
+    const values = [];
+    const statusArray = statuses
+      ? statuses.split(",").map((s) => parseInt(s.trim()))
+      : [1, 2, 3];
+
+    const placeholders = statusArray.map((_, i) => `$${i + 1}`).join(", ");
+
     // Base query
     let query = `
       SELECT 
@@ -202,16 +210,11 @@ exports.exportRegistrationsNeedProcess = async (req, res) => {
       FROM registration r
       JOIN users u ON r.registrant_id = u.user_id
       JOIN training t ON r.training_id = t.training_id
-      WHERE r.status = ANY($1)
+      WHERE r.status IN (${placeholders})
     `;
 
-    // Build parameter array
-    const values = [];
-    const statusArray = statuses
-      ? statuses.split(",").map((s) => parseInt(s.trim()))
-      : [1, 2, 3];
-    values.push(statusArray);
-    let index = 2;
+    values.push(...statusArray);
+    let index = statusArray.length + 1;
 
     // Filter by date
     if (start && end) {
