@@ -39,6 +39,7 @@ const allCertificateRoutes = require("./routes/allCertificateRoutes");
 const partnerRoutes = require("./routes/partnerRoutes");
 const emailRoutes = require("./routes/emailRoutes");
 const homeRoutes = require("./routes/homeRoutes");
+const exportRoutes = require("./routes/exportRoutes");
 
 app.use("/auth", authRoutes);
 app.use("/user", userRoutes);
@@ -56,6 +57,7 @@ app.use("/certificates", allCertificateRoutes);
 app.use("/partner", partnerRoutes);
 app.use("/email", emailRoutes);
 app.use("/home", homeRoutes);
+app.use("/export", exportRoutes);
 
 // Test API
 app.get("/message", (req, res) => {
