@@ -524,3 +524,207 @@ exports.exportRegistrationsOnProgress = async (req, res) => {
     client.release();
   }
 };
+
+// Export Registration Training (Completed)
+exports.exportRegistrationsCompleted = async (req, res) => {
+  const {
+    start,
+    end,
+    dateType = "registration_date", // registration_date / training_date / completed_date
+    attendance_status,
+    training_id,
+    has_review,
+  } = req.query;
+
+  const client = await db.connect();
+  try {
+    // Validate dateType
+    if (
+      !["registration_date", "training_date", "completed_date"].includes(
+        dateType
+      )
+    ) {
+      return sendBadRequestResponse(res, "Invalid date type filter.");
+    }
+
+    // Base query
+    let query = `
+      SELECT 
+        r.registration_id,
+        r.registration_date,
+        r.training_date,
+        r.completed_date,
+        rp.registration_participant_id,
+        rp.attendance_status,
+        CASE
+          WHEN rp.attendance_status = true THEN 'Present'
+          WHEN rp.attendance_status = false THEN 'Absent'
+          ELSE NULL
+        END AS attendance_label,
+        rp.has_certificate,
+        rp.advantech_cert,
+        u.user_id,
+        u.fullname AS participant_name,
+        u.phone_number,
+        u.email,
+        u.institution,
+        t.training_id,
+        t.training_name,
+        t.training_fees,
+        c.certificate_id,
+        c.certificate_number,
+        c.cert_file,
+        c.issued_date,
+        c.expired_date,
+        CASE 
+          WHEN EXISTS (
+            SELECT 1 FROM review rv 
+            WHERE rv.registration_participant_id = rp.registration_participant_id
+          ) THEN TRUE
+          ELSE FALSE
+        END AS has_review
+      FROM registration_participant rp
+      JOIN registration r ON rp.registration_id = r.registration_id
+      JOIN users u ON rp.user_id = u.user_id
+      JOIN training t ON r.training_id = t.training_id
+      LEFT JOIN certificate c ON rp.registration_participant_id = c.registration_participant_id
+      WHERE r.status = 4
+    `;
+
+    // Parameters
+    const values = [];
+    let index = 1;
+
+    // Filter attendance_status (present/absent only)
+    if (attendance_status) {
+      const statusArray = attendance_status.split(",").map((s) => s === "true"); // hanya true/false
+      const conditions = statusArray
+        .map((_, i) => `rp.attendance_status = $${index++}`)
+        .join(" OR ");
+      query += ` AND (${conditions})`;
+      values.push(...statusArray);
+    }
+
+    // Filter tanggal (registration_date / training_date / completed_date)
+    if (start && end) {
+      query += ` AND r.${dateType} BETWEEN $${index} AND $${index + 1}`;
+      values.push(start, end);
+      index += 2;
+    }
+
+    // Filter training
+    if (training_id) {
+      query += ` AND r.training_id = $${index}`;
+      values.push(training_id);
+      index++;
+    }
+
+    // Filter has_review (true / false)
+    if (has_review === "true" || has_review === "false") {
+      query += ` AND (
+        CASE 
+          WHEN EXISTS (
+            SELECT 1 FROM review rv 
+            WHERE rv.registration_participant_id = rp.registration_participant_id
+          ) THEN TRUE ELSE FALSE END
+      ) = $${index}`;
+      values.push(has_review === "true");
+      index++;
+    }
+
+    // Sort
+    query += ` ORDER BY r.${dateType} DESC`;
+
+    const result = await client.query(query, values);
+    if (result.rows.length === 0) {
+      return sendBadRequestResponse(
+        res,
+        "No completed registration data found for export."
+      );
+    }
+
+    // Format tanggal ke WIB
+    const formattedRows = result.rows.map((row) => ({
+      ...row,
+      registration_date: formatDateToWIB(row.registration_date),
+      training_date: formatDateToWIB(row.training_date),
+      completed_date: formatDateToWIB(row.completed_date),
+      issued_date: formatDateToWIB(row.issued_date),
+      expired_date: formatDateToWIB(row.expired_date),
+      has_review: row.has_review ? "TRUE" : "FALSE",
+    }));
+
+    // Create Excel workbook
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Completed Registrations");
+
+    worksheet.columns = [
+      { header: "Registration ID", key: "registration_id", width: 25 },
+      { header: "Registration Date", key: "registration_date", width: 22 },
+      { header: "Training Date", key: "training_date", width: 22 },
+      { header: "Completed Date", key: "completed_date", width: 22 },
+      {
+        header: "Participant ID",
+        key: "registration_participant_id",
+        width: 25,
+      },
+      { header: "Participant Name", key: "participant_name", width: 25 },
+      { header: "Phone Number", key: "phone_number", width: 18 },
+      { header: "Email", key: "email", width: 28 },
+      { header: "Institution", key: "institution", width: 40 },
+      { header: "Attendance Status", key: "attendance_label", width: 18 },
+      { header: "Has Certificate", key: "has_certificate", width: 18 },
+      { header: "Advantech Cert", key: "advantech_cert", width: 25 },
+      { header: "Has Review", key: "has_review", width: 18 },
+      { header: "Training ID", key: "training_id", width: 22 },
+      { header: "Training Name", key: "training_name", width: 30 },
+      { header: "Training Fees", key: "training_fees", width: 18 },
+      { header: "Certificate ID", key: "certificate_id", width: 25 },
+      { header: "Certificate Number", key: "certificate_number", width: 25 },
+      { header: "Certificate File", key: "cert_file", width: 35 },
+      { header: "Issued Date", key: "issued_date", width: 22 },
+      { header: "Expired Date", key: "expired_date", width: 22 },
+    ];
+
+    worksheet.addRows(formattedRows);
+
+    // Style header
+    const headerRow = worksheet.getRow(1);
+    headerRow.font = { bold: true };
+    headerRow.alignment = { vertical: "middle", horizontal: "center" };
+
+    worksheet.eachRow((row) => {
+      worksheet.columns.forEach((_, colIndex) => {
+        const cell = row.getCell(colIndex + 1);
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        };
+      });
+      row.height = 20;
+    });
+
+    // Generate Excel file
+    const buffer = await workbook.xlsx.writeBuffer();
+    const timestamp = generateTimestampWIB();
+    const filename = `registraining_export_completed_${timestamp}.xlsx`;
+
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader("Content-Length", buffer.length);
+    res.send(buffer);
+  } catch (err) {
+    console.error("Error exporting registrations (completed):", err);
+    res.status(500).json({
+      message: "Failed to export registration data (completed)",
+      error: err.message,
+    });
+  } finally {
+    client.release();
+  }
+};
