@@ -148,7 +148,11 @@ exports.exportUsers = async (req, res) => {
     const timestamp = generateTimestampWIB();
     const filename = `users_export_${timestamp}.xlsx`;
 
-    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader(
+      "Access-Control-Expose-Headers",
+      "Content-Disposition",
+      `attachment; filename="${filename}"`
+    );
     res.setHeader(
       "Content-Type",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -297,7 +301,11 @@ exports.exportRegistrationsNeedProcess = async (req, res) => {
     const timestamp = generateTimestampWIB();
     const filename = `registraining_export_needprocess_${timestamp}.xlsx`;
 
-    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader(
+      "Access-Control-Expose-Headers",
+      "Content-Disposition",
+      `attachment; filename="${filename}"`
+    );
     res.setHeader(
       "Content-Type",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -508,7 +516,11 @@ exports.exportRegistrationsOnProgress = async (req, res) => {
     const timestamp = generateTimestampWIB();
     const filename = `registraining_export_onprogress_${timestamp}.xlsx`;
 
-    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader(
+      "Access-Control-Expose-Headers",
+      "Content-Disposition",
+      `attachment; filename="${filename}"`
+    );
     res.setHeader(
       "Content-Type",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -712,7 +724,11 @@ exports.exportRegistrationsCompleted = async (req, res) => {
     const timestamp = generateTimestampWIB();
     const filename = `registraining_export_completed_${timestamp}.xlsx`;
 
-    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader(
+      "Access-Control-Expose-Headers",
+      "Content-Disposition",
+      `attachment; filename="${filename}"`
+    );
     res.setHeader(
       "Content-Type",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
