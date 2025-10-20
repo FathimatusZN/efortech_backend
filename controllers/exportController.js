@@ -46,6 +46,8 @@ exports.exportUsers = async (req, res) => {
         u.email,
         u.phone_number,
         u.institution,
+        u.role,
+        u.poition,
         CASE 
           WHEN u.gender = 1 THEN 'Male'
           WHEN u.gender = 2 THEN 'Female'
@@ -113,6 +115,8 @@ exports.exportUsers = async (req, res) => {
       { header: "Email", key: "email", width: 30 },
       { header: "Phone Number", key: "phone_number", width: 18 },
       { header: "Institution", key: "institution", width: 25 },
+      { header: "Role", key: "role", width: 25 },
+      { header: "Position", key: "position", width: 50 },
       { header: "Gender", key: "gender", width: 10 },
       { header: "Birthdate", key: "birthdate", width: 15 },
       { header: "Role ID", key: "role_id", width: 15 },
@@ -586,8 +590,6 @@ exports.exportRegistrationsCompleted = async (req, res) => {
         u.phone_number,
         u.email,
         u.institution,
-        u.role,
-        u.position,
         t.training_id,
         t.training_name,
         t.training_fees,
