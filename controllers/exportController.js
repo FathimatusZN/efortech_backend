@@ -329,6 +329,7 @@ exports.exportRegistrationsOnProgress = async (req, res) => {
     attendance_status,
     training_id,
     has_review,
+    has_advantech_cert,
   } = req.query;
 
   const client = await db.connect();
@@ -432,6 +433,15 @@ exports.exportRegistrationsOnProgress = async (req, res) => {
       ) = $${index}`;
       values.push(has_review === "true");
       index++;
+    }
+
+    // Filter has_advantech_cert (true: ada, false: null)
+    if (has_advantech_cert === "true" || has_advantech_cert === "false") {
+      if (has_advantech_cert === "true") {
+        query += ` AND rp.advantech_cert IS NOT NULL`;
+      } else {
+        query += ` AND rp.advantech_cert IS NULL`;
+      }
     }
 
     // Sort
@@ -541,6 +551,7 @@ exports.exportRegistrationsCompleted = async (req, res) => {
     attendance_status,
     training_id,
     has_review,
+    has_advantech_cert,
   } = req.query;
 
   const client = await db.connect();
@@ -637,6 +648,15 @@ exports.exportRegistrationsCompleted = async (req, res) => {
       ) = $${index}`;
       values.push(has_review === "true");
       index++;
+    }
+
+    // Filter has_advantech_cert (true: ada, false: null)
+    if (has_advantech_cert === "true" || has_advantech_cert === "false") {
+      if (has_advantech_cert === "true") {
+        query += ` AND rp.advantech_cert IS NOT NULL`;
+      } else {
+        query += ` AND rp.advantech_cert IS NULL`;
+      }
     }
 
     // Sort
