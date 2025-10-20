@@ -596,9 +596,16 @@ exports.checkUserRegistration = async (req, res) => {
   try {
     // Query to check if user is already registered in the training
     const query = `
-      SELECT rp.registration_participant_id, r.registration_id, r.status
+      SELECT 
+        rp.registration_participant_id,
+        r.registration_id,
+        r.status AS registration_status,
+        r.registration_date,
+        r.training_date,
+        t.training_name
       FROM registration_participant rp
       JOIN registration r ON rp.registration_id = r.registration_id
+      JOIN training t ON r.training_id = t.training_id
       WHERE rp.user_id = $1 AND r.training_id = $2
       LIMIT 1
     `;
@@ -606,17 +613,36 @@ exports.checkUserRegistration = async (req, res) => {
     const result = await client.query(query, [user_id, training_id]);
 
     if (result.rows.length > 0) {
-      // User already registered
+      const data = result.rows[0];
+
+      // Map numeric status to human-readable label
+      let statusLabel = "Upcoming";
+      switch (data.registration_status) {
+        case 4:
+          statusLabel = "Done";
+          break;
+        case 5:
+          statusLabel = "Cancelled";
+          break;
+        default:
+          statusLabel = "Upcoming";
+      }
+
+      // Build detailed response object
+      const responseData = {
+        isRegistered: true,
+        registration_participant_id: data.registration_participant_id,
+        registration_id: data.registration_id,
+        training_name: data.training_name,
+        registration_date: data.registration_date,
+        training_date: data.training_date,
+        status_label: statusLabel,
+      };
+
       return sendSuccessResponse(
         res,
         "User already registered in this training",
-        {
-          isRegistered: true,
-          registration_participant_id:
-            result.rows[0].registration_participant_id,
-          registration_id: result.rows[0].registration_id,
-          registration_status: result.rows[0].status,
-        }
+        responseData
       );
     } else {
       // Not registered yet
