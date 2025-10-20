@@ -47,7 +47,7 @@ exports.exportUsers = async (req, res) => {
         u.phone_number,
         u.institution,
         u.role,
-        u.poition,
+        u.position,
         CASE 
           WHEN u.gender = 1 THEN 'Male'
           WHEN u.gender = 2 THEN 'Female'
