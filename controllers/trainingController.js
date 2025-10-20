@@ -454,7 +454,7 @@ exports.checkTrainingRelations = async (req, res) => {
   const client = await db.connect();
 
   try {
-    // Check if training exists
+    // 🟦 1. Check if training exists
     const { rows: training } = await client.query(
       `SELECT training_id FROM training WHERE training_id = $1`,
       [training_id]
@@ -464,13 +464,15 @@ exports.checkTrainingRelations = async (req, res) => {
       return sendNotFoundResponse(res, "Training not found");
     }
 
-    // Check related registrations
+    // 🟦 2. Check related registrations
     const { rows: registrations } = await client.query(
       `SELECT registration_id FROM registration WHERE training_id = $1`,
       [training_id]
     );
 
-    if (registrations.length === 0) {
+    const totalRegistrations = registrations.length;
+
+    if (totalRegistrations === 0) {
       // No registrations at all
       return sendSuccessResponse(
         res,
@@ -479,11 +481,17 @@ exports.checkTrainingRelations = async (req, res) => {
           relation_status: 1, // 1 = No registration
           message:
             "This training has no registration data and can be safely deleted.",
+          summary: {
+            total_registration: 0,
+            total_participant: 0,
+            total_review: 0,
+            total_certificate: 0,
+          },
         }
       );
     }
 
-    // Check if any participant has certificates
+    // 🟦 3. Check participants
     const { rows: participants } = await client.query(
       `
         SELECT rp.registration_participant_id, rp.has_certificate
@@ -494,7 +502,26 @@ exports.checkTrainingRelations = async (req, res) => {
       [training_id]
     );
 
-    const hasCertified = participants.some((p) => p.has_certificate === true);
+    const totalParticipants = participants.length;
+    const totalCertificates = participants.filter(
+      (p) => p.has_certificate === true
+    ).length;
+
+    // 🟦 4. Check reviews
+    const { rows: reviews } = await client.query(
+      `
+        SELECT review_id 
+        FROM review rv
+        JOIN registration_participant rp ON rv.registration_participant_id = rp.registration_participant_id
+        JOIN registration r ON rp.registration_id = r.registration_id
+        WHERE r.training_id = $1
+      `,
+      [training_id]
+    );
+    const totalReviews = reviews.length;
+
+    // 🟩 5. Determine relation status
+    const hasCertified = totalCertificates > 0;
 
     if (hasCertified) {
       return sendSuccessResponse(
@@ -504,11 +531,17 @@ exports.checkTrainingRelations = async (req, res) => {
           relation_status: 3, // 3 = Has registrations and certificates
           message:
             "Cannot delete this training because some participants already have certificates.",
+          summary: {
+            total_registration: totalRegistrations,
+            total_participant: totalParticipants,
+            total_review: totalReviews,
+            total_certificate: totalCertificates,
+          },
         }
       );
     }
 
-    // If there are registrations but no certificates
+    // 🟨 If there are registrations but no certificates
     return sendSuccessResponse(
       res,
       "Training has registrations but no certificates yet",
@@ -516,6 +549,12 @@ exports.checkTrainingRelations = async (req, res) => {
         relation_status: 2, // 2 = Has registration but no certificate
         message:
           "Training can be deleted safely since there are registrations but no certificates.",
+        summary: {
+          total_registration: totalRegistrations,
+          total_participant: totalParticipants,
+          total_review: totalReviews,
+          total_certificate: totalCertificates,
+        },
       }
     );
   } catch (error) {
