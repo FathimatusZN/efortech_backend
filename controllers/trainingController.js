@@ -224,6 +224,107 @@ exports.softDeleteTraining = async (req, res) => {
   }
 };
 
+// Delete training with related records (registration, registration_participant, review), Only allowed if no participant has a certificate
+exports.deleteTrainingWithRelations = async (req, res) => {
+  const client = await db.connect();
+  try {
+    const { training_id } = req.params;
+
+    // Step 1. Check if the training exists
+    const { rows: trainingRows } = await client.query(
+      `SELECT training_id FROM training WHERE training_id = $1`,
+      [training_id]
+    );
+    if (trainingRows.length === 0) {
+      return sendNotFoundResponse(res, "Training not found");
+    }
+
+    // Step 2. Find all registration_participants related to the training
+    const { rows: participants } = await client.query(
+      `
+        SELECT rp.registration_participant_id, rp.has_certificate
+        FROM registration_participant rp
+        JOIN registration r ON rp.registration_id = r.registration_id
+        WHERE r.training_id = $1
+      `,
+      [training_id]
+    );
+
+    // Step 3. Ensure no participant already has a certificate
+    const hasCertifiedParticipant = participants.some(
+      (p) => p.has_certificate === true
+    );
+    if (hasCertifiedParticipant) {
+      return sendForbiddenResponse(
+        res,
+        "Cannot delete this training because one or more participants already have certificates."
+      );
+    }
+
+    // Step 4. Begin transaction to maintain data integrity
+    await client.query("BEGIN");
+
+    // Step 5. Delete all reviews linked to registration participants of this training
+    await client.query(
+      `
+        DELETE FROM review
+        WHERE registration_participant_id IN (
+          SELECT rp.registration_participant_id
+          FROM registration_participant rp
+          JOIN registration r ON rp.registration_id = r.registration_id
+          WHERE r.training_id = $1
+        )
+      `,
+      [training_id]
+    );
+
+    // Step 6. Delete registration participants linked to this training
+    await client.query(
+      `
+        DELETE FROM registration_participant
+        WHERE registration_id IN (
+          SELECT registration_id FROM registration WHERE training_id = $1
+        )
+      `,
+      [training_id]
+    );
+
+    // Step 7. Delete registrations linked to this training
+    await client.query(
+      `
+        DELETE FROM registration
+        WHERE training_id = $1
+      `,
+      [training_id]
+    );
+
+    // Step 8. Delete the training record itself
+    const deleteTrainingResult = await client.query(
+      `DELETE FROM training WHERE training_id = $1`,
+      [training_id]
+    );
+
+    // Step 9. Commit transaction
+    await client.query("COMMIT");
+
+    if (deleteTrainingResult.rowCount === 0) {
+      return sendNotFoundResponse(res, "Training not found or already deleted");
+    }
+
+    return sendSuccessResponse(
+      res,
+      "Training and related data deleted successfully"
+    );
+  } catch (error) {
+    // Rollback transaction on error
+    await client.query("ROLLBACK");
+    console.error("Error deleting training with relations:", error);
+    return sendErrorResponse(res, "Failed to delete training and related data");
+  } finally {
+    client.release();
+  }
+};
+
 // Get all trainings with optional filters and sorting
 exports.getTrainings = async (req, res) => {
   try {
