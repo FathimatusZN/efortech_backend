@@ -586,6 +586,8 @@ exports.exportRegistrationsCompleted = async (req, res) => {
         u.phone_number,
         u.email,
         u.institution,
+        u.role,
+        u.position,
         t.training_id,
         t.training_name,
         t.training_fees,
