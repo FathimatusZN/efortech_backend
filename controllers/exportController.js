@@ -34,7 +34,7 @@ function generateTimestampWIB() {
 
 // Export user data to an Excel file
 exports.exportUsers = async (req, res) => {
-  const { start, end, roles } = req.query;
+  const { start, end, roles, role } = req.query;
   const client = await db.connect();
 
   try {
@@ -88,13 +88,45 @@ exports.exportUsers = async (req, res) => {
       index += 1;
     }
 
-    // Apply role filter
-    if (roles) {
-      const roleArray = roles.split(",").map((r) => r.trim());
-      const placeholders = roleArray.map((_, i) => `$${index + i}`).join(", ");
+    // Apply role_id filter (role1, role2, …)
+    if (roles && roles.length > 0) {
+      const roleIdArray = roles.split(",").map((r) => r.trim());
+      const placeholders = roleIdArray
+        .map((_, i) => `$${index + i}`)
+        .join(", ");
       query += ` AND u.role_id IN (${placeholders})`;
-      values.push(...roleArray);
-      index += roleArray.length;
+      values.push(...roleIdArray);
+      index += roleIdArray.length;
+    }
+
+    // Apply users.role filter (integer + optional "others")
+    if (role && role.length > 0) {
+      const roleArray = role.split(",").map((r) => r.trim());
+
+      const numericRoles = roleArray
+        .filter((r) => !isNaN(r))
+        .map((r) => parseInt(r, 10));
+
+      const conditions = [];
+
+      if (numericRoles.length > 0) {
+        const placeholders = numericRoles
+          .map((_, i) => `$${index + i}`)
+          .join(", ");
+        conditions.push(`u.role IN (${placeholders})`);
+        values.push(...numericRoles);
+        index += numericRoles.length;
+      }
+
+      // Ambil “others” = nilai selain 1–5 atau NULL
+      const hasOthers = roleArray.includes("others"); // frontend bisa kirim "others" untuk nilai lain
+      if (hasOthers) {
+        conditions.push(`(u.role NOT IN (1,2,3,4,5) OR u.role IS NULL)`);
+      }
+
+      if (conditions.length > 0) {
+        query += ` AND (${conditions.join(" OR ")})`;
+      }
     }
 
     query += ` ORDER BY u.created_at DESC`;
