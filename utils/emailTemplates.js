@@ -28,10 +28,9 @@ const certificateIssuedTemplate = ({
 
         <br/>
         <p>You can check your certificate using the following link:<br/>
-        <a href="https://edu.efortechsolutions.com/edit-profile/review/${registration_participant_id}" target="_blank" style="color: #1a73e8; font-weight: bold; font-style: italic;">
-          https://edu.efortechsolutions.com/edit-profile/review/${registration_participant_id}
+        <a href="https://edu.efortechsolutions.com/certificate/${certificateNumber}" target="_blank" style="color: #1a73e8; font-weight: bold; font-style: italic;">
+          https://edu.efortechsolutions.com/certificate/${certificateNumber}
         </a></p>
-
         <p>We sincerely thank you for your active participation and commitment throughout the training.</p>
         <br/>
       </div>
