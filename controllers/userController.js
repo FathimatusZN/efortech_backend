@@ -25,7 +25,7 @@ exports.getUserProfile = async (req, res) => {
 
   try {
     const result = await db.query(
-      `SELECT users.user_id, users.fullname, users.email, users.phone_number, users.institution, users.gender, users.birthdate, users.user_photo, users.created_at, roles.role_desc 
+      `SELECT users.user_id, users.fullname, users.email, users.phone_number, users.institution, users.gender, users.birthdate, users.user_photo, users.created_at, users.role, users.position, roles.role_desc 
        FROM users 
        JOIN roles ON users.role_id = roles.role_id 
        WHERE users.user_id = $1`,
@@ -41,7 +41,10 @@ exports.getUserProfile = async (req, res) => {
     return sendSuccessResponse(res, "User profile fetched successfully", {
       user_id: user.user_id,
       email: user.email,
+      role_id: user.role_id,
       role: user.role_desc,
+      user_category: user.role, // integer-based category (teacher, student, etc.)
+      position: user.position,
       fullname: user.fullname,
       phone_number: user.phone_number,
       institution: user.institution,
@@ -61,7 +64,7 @@ exports.getUserProfileNoToken = async (req, res) => {
 
   try {
     const result = await db.query(
-      `SELECT users.user_id, users.fullname, users.email, users.phone_number, users.institution, users.gender, users.birthdate, users.user_photo, users.created_at, roles.role_desc 
+      `SELECT users.user_id, users.fullname, users.email, users.phone_number, users.institution, users.gender, users.birthdate, users.user_photo, users.created_at, users.role, users.position, roles.role_desc 
        FROM users 
        JOIN roles ON users.role_id = roles.role_id 
        WHERE users.user_id = $1`,
@@ -77,7 +80,10 @@ exports.getUserProfileNoToken = async (req, res) => {
     return sendSuccessResponse(res, "User profile fetched successfully", {
       user_id: user.user_id,
       email: user.email,
+      role_id: user.role_id,
       role: user.role_desc,
+      user_category: user.role, // integer-based category
+      position: user.position,
       fullname: user.fullname,
       phone_number: user.phone_number,
       institution: user.institution,
@@ -127,8 +133,16 @@ exports.changePassword = async (req, res) => {
 // Edit user profile
 exports.updateUserProfile = async (req, res) => {
   const user_id = req.user.uid;
-  const { fullname, institution, phone_number, gender, birthdate, user_photo } =
-    req.body;
+  const {
+    fullname,
+    institution,
+    phone_number,
+    gender,
+    birthdate,
+    user_photo,
+    role,
+    position,
+  } = req.body;
 
   if (!fullname) {
     return sendBadRequestResponse(res, "Full name is required");
@@ -146,13 +160,15 @@ exports.updateUserProfile = async (req, res) => {
     genderValue,
     birthdate || null,
     user_photo || null,
+    role || null,
+    position || null,
     user_id,
   ];
 
   const updateQuery = `
   UPDATE users 
-  SET fullname = $1, institution = $2, phone_number = $3, gender = $4, birthdate = $5, user_photo = $6
-  WHERE user_id = $7
+  SET fullname = $1, institution = $2, phone_number = $3, gender = $4, birthdate = $5, user_photo = $6, role = $7, position = $8
+  WHERE user_id = $9
   RETURNING *;
   `;
 
@@ -205,6 +221,8 @@ exports.searchUserByEmail = async (req, res) => {
       fullname: dbUser.fullname,
       user_photo: dbUser.user_photo,
       institution: dbUser.institution,
+      role: dbUser.role,
+      position: dbUser.position,
     };
 
     return sendSuccessResponse(res, "User found.", result);
@@ -237,6 +255,8 @@ exports.getAllUsers = async (req, res) => {
       "gender",
       "birthdate",
       "role_id",
+      "role",
+      "position",
       "created_at",
     ];
     const allowedOrder = ["asc", "desc"];
@@ -252,7 +272,7 @@ exports.getAllUsers = async (req, res) => {
     let query = `
       SELECT u.user_id, u.fullname, u.email, u.phone_number, 
              u.institution, u.gender, u.birthdate, u.user_photo, 
-             u.created_at, u.role_id, r.role_desc
+             u.created_at, u.role_id, u.role, u.position, r.role_desc
       FROM users u
       JOIN roles r ON u.role_id = r.role_id
       WHERE 1=1
