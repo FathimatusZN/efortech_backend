@@ -447,3 +447,81 @@ exports.getTrainingById = async (req, res) => {
     return sendErrorResponse(res, "Failed to fetch training");
   }
 };
+
+// Check training relations: registration and certificate status
+exports.checkTrainingRelations = async (req, res) => {
+  const { training_id } = req.params;
+  const client = await db.connect();
+
+  try {
+    // Check if training exists
+    const { rows: training } = await client.query(
+      `SELECT training_id FROM training WHERE training_id = $1`,
+      [training_id]
+    );
+
+    if (training.length === 0) {
+      return sendNotFoundResponse(res, "Training not found");
+    }
+
+    // Check related registrations
+    const { rows: registrations } = await client.query(
+      `SELECT registration_id FROM registration WHERE training_id = $1`,
+      [training_id]
+    );
+
+    if (registrations.length === 0) {
+      // No registrations at all
+      return sendSuccessResponse(
+        res,
+        "No registrations found for this training",
+        {
+          relation_status: 1, // 1 = No registration
+          message:
+            "This training has no registration data and can be safely deleted.",
+        }
+      );
+    }
+
+    // Check if any participant has certificates
+    const { rows: participants } = await client.query(
+      `
+        SELECT rp.registration_participant_id, rp.has_certificate
+        FROM registration_participant rp
+        JOIN registration r ON rp.registration_id = r.registration_id
+        WHERE r.training_id = $1
+      `,
+      [training_id]
+    );
+
+    const hasCertified = participants.some((p) => p.has_certificate === true);
+
+    if (hasCertified) {
+      return sendSuccessResponse(
+        res,
+        "Training has registrations and at least one participant with a certificate",
+        {
+          relation_status: 3, // 3 = Has registrations and certificates
+          message:
+            "Cannot delete this training because some participants already have certificates.",
+        }
+      );
+    }
+
+    // If there are registrations but no certificates
+    return sendSuccessResponse(
+      res,
+      "Training has registrations but no certificates yet",
+      {
+        relation_status: 2, // 2 = Has registration but no certificate
+        message:
+          "Training can be deleted safely since there are registrations but no certificates.",
+      }
+    );
+  } catch (error) {
+    console.error("Error checking training relations:", error);
+    sendErrorResponse(res, "Failed to check training relations");
+  } finally {
+    client.release();
+  }
+};
