@@ -78,6 +78,14 @@ exports.exportUsers = async (req, res) => {
       query += ` AND u.created_at BETWEEN $${index} AND $${index + 1}`;
       values.push(start, end);
       index += 2;
+    } else if (start) {
+      query += ` AND u.created_at >= $${index}`;
+      values.push(start);
+      index += 1;
+    } else if (end) {
+      query += ` AND u.created_at <= $${index}`;
+      values.push(end);
+      index += 1;
     }
 
     // Apply role filter
