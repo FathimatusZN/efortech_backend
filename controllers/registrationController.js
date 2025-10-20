@@ -582,3 +582,52 @@ exports.searchRegistrations = async (req, res) => {
     client.release();
   }
 };
+
+// Function to check if a user is already registered in a specific training
+exports.checkUserRegistration = async (req, res) => {
+  const { user_id, training_id } = req.params;
+
+  // Basic validation
+  if (!user_id || !training_id) {
+    return sendBadRequestResponse(res, "user_id and training_id are required");
+  }
+
+  const client = await db.connect();
+  try {
+    // Query to check if user is already registered in the training
+    const query = `
+      SELECT rp.registration_participant_id, r.registration_id, r.status
+      FROM registration_participant rp
+      JOIN registration r ON rp.registration_id = r.registration_id
+      WHERE rp.user_id = $1 AND r.training_id = $2
+      LIMIT 1
+    `;
+
+    const result = await client.query(query, [user_id, training_id]);
+
+    if (result.rows.length > 0) {
+      // User already registered
+      return sendSuccessResponse(
+        res,
+        "User already registered in this training",
+        {
+          isRegistered: true,
+          registration_participant_id:
+            result.rows[0].registration_participant_id,
+          registration_id: result.rows[0].registration_id,
+          registration_status: result.rows[0].status,
+        }
+      );
+    } else {
+      // Not registered yet
+      return sendSuccessResponse(res, "User not registered in this training", {
+        isRegistered: false,
+      });
+    }
+  } catch (err) {
+    console.error("Check user registration error:", err);
+    return sendErrorResponse(res, "Failed to check user registration");
+  } finally {
+    client.release();
+  }
+};
