@@ -8,6 +8,7 @@ const {
   getTrainings,
   getTrainingById,
   deleteTrainingWithRelations,
+  checkTrainingRelations,
 } = require("../controllers/trainingController");
 const uploadFile = require("../middlewares/imageUpload");
 const {
@@ -20,6 +21,9 @@ router.get("/", getTrainings);
 
 // Get detail training by ID
 router.get("/id/:training_id", getTrainingById);
+
+// Check training relations (new endpoint)
+router.get("/check-relations/:training_id", checkTrainingRelations);
 
 // Add training
 router.post("/", addTraining);
