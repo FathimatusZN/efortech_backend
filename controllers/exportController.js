@@ -47,6 +47,14 @@ exports.exportUsers = async (req, res) => {
         u.phone_number,
         u.institution,
         u.role,
+        CASE 
+          WHEN u.role = 1 THEN 'Teacher / Lecturer'
+          WHEN u.role = 2 THEN 'Student'
+          WHEN u.role = 3 THEN 'University Student'
+          WHEN u.role = 4 THEN 'Professional'
+          WHEN u.role = 5 THEN 'Others'
+          ELSE ' '
+        END AS role_name,
         u.position,
         CASE 
           WHEN u.gender = 1 THEN 'Male'
@@ -60,7 +68,7 @@ exports.exportUsers = async (req, res) => {
           WHEN u.role_id = 'role2' THEN 'Admin'
           WHEN u.role_id = 'role3' THEN 'Superadmin'
           ELSE u.role_id
-        END AS role_name,
+        END AS roles_name,
         u.created_at AS user_created_at,
         a.created_date AS admin_created_date,
         a.last_updated AS admin_last_updated,
@@ -155,12 +163,12 @@ exports.exportUsers = async (req, res) => {
       { header: "Email", key: "email", width: 30 },
       { header: "Phone Number", key: "phone_number", width: 18 },
       { header: "Institution", key: "institution", width: 25 },
-      { header: "Role", key: "role", width: 25 },
+      { header: "Role", key: "role_name", width: 25 },
       { header: "Position", key: "position", width: 50 },
       { header: "Gender", key: "gender", width: 10 },
       { header: "Birthdate", key: "birthdate", width: 15 },
       { header: "Role ID", key: "role_id", width: 15 },
-      { header: "Role Name", key: "role_name", width: 15 },
+      { header: "Role Name", key: "roles_name", width: 15 },
       { header: "User Created At", key: "user_created_at", width: 20 },
       { header: "Admin Created Date", key: "admin_created_date", width: 20 },
       { header: "Admin Last Updated", key: "admin_last_updated", width: 20 },
