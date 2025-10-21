@@ -438,6 +438,8 @@ exports.exportRegistrationsOnProgress = async (req, res) => {
       JOIN training t ON r.training_id = t.training_id
       LEFT JOIN certificate c ON rp.registration_participant_id = c.registration_participant_id
       WHERE r.status = 4
+        AND (rp.attendance_status IS NULL OR rp.attendance_status = true)
+        AND rp.has_certificate = false
     `;
 
     // Parameters
@@ -659,6 +661,7 @@ exports.exportRegistrationsCompleted = async (req, res) => {
       JOIN training t ON r.training_id = t.training_id
       LEFT JOIN certificate c ON rp.registration_participant_id = c.registration_participant_id
       WHERE r.status = 4
+        AND ((rp.attendance_status IS TRUE AND rp.has_certificate = true) OR rp.attendance_status = false)
     `;
 
     // Parameters
