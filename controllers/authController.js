@@ -70,3 +70,59 @@ exports.loginUser = async (req, res) => {
     return sendBadRequestResponse(res, "Invalid token");
   }
 };
+
+// Register user via Google
+exports.registerGoogleUser = async (req, res) => {
+  try {
+    // Ambil token dari header Authorization
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      return sendUnauthorizedResponse(res, "No token provided");
+    }
+    const idToken = authHeader.split(" ")[1]; // Bearer <token>
+
+    // Verifikasi token menggunakan Firebase Admin
+    const decodedToken = await auth.verifyIdToken(idToken);
+    const { uid, email, name, picture } = decodedToken;
+
+    if (!email) {
+      return sendBadRequestResponse(res, "Email not found in token");
+    }
+
+    // Cek apakah user sudah ada di DB
+    const existingUser = await db.query(
+      "SELECT * FROM users WHERE email = $1",
+      [email]
+    );
+
+    if (existingUser.rows.length > 0) {
+      return sendBadRequestResponse(res, "User already exists");
+    }
+
+    // Buat user baru di Firebase Auth (optional, tapi biasanya sudah ada di decodedToken)
+    // const userRecord = await auth.createUser({ uid, email, displayName: name });
+
+    // Simpan user ke database
+    const roleId = "role1"; // default role, bisa diubah
+    const query = `
+      INSERT INTO users (user_id, fullname, email, role_id, created_at)
+      VALUES ($1, $2, $3, $4, NOW())
+      RETURNING *
+    `;
+    const result = await db.query(query, [
+      uid,
+      name || "Unknown",
+      email,
+      roleId,
+    ]);
+
+    return sendCreatedResponse(
+      res,
+      "User registered via Google successfully",
+      result.rows[0]
+    );
+  } catch (error) {
+    console.error("Google register error:", error);
+    return sendErrorResponse(res, "Failed to register via Google");
+  }
+};
