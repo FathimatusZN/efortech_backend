@@ -1176,3 +1176,197 @@ exports.exportTrainingCertificates = async (req, res) => {
     client.release();
   }
 };
+
+// Export User Upload Certificates
+exports.exportUserCertificates = async (req, res) => {
+  const {
+    start,
+    end,
+    dateType = "issued_date", // issued_date / expired_date
+    certificate_status, // valid / expired
+  } = req.query;
+
+  const client = await db.connect();
+  try {
+    // Validate dateType
+    const validDateTypes = ["issued_date", "expired_date"];
+    if (!validDateTypes.includes(dateType)) {
+      return sendBadRequestResponse(res, "Invalid date type filter.");
+    }
+
+    // Base query with all required joins
+    let query = `
+      SELECT 
+        uc.user_certificate_id,
+        uc.fullname AS certificate_fullname,
+        uc.cert_type,
+        uc.issuer,
+        uc.issued_date,
+        uc.expired_date,
+        uc.certificate_number,
+        uc.original_number,
+        uc.cert_file,
+        uc.status,
+        CASE 
+          WHEN uc.status = 1 THEN 'Pending'
+          WHEN uc.status = 2 THEN 'Accepted'
+          WHEN uc.status = 3 THEN 'Rejected'
+          ELSE 'Unknown'
+        END AS status_label,
+        uc.verified_by,
+        uc.verification_date,
+        uc.created_at,
+        uc.notes,
+        CASE 
+          WHEN uc.expired_date IS NULL THEN 'Valid'
+          WHEN uc.expired_date < CURRENT_DATE THEN 'Expired'
+          ELSE 'Valid'
+        END AS certificate_status,
+        u.user_id,
+        u.fullname AS user_fullname,
+        u.email,
+        u.phone_number,
+        u.institution,
+        u.position
+      FROM user_certificates uc
+      LEFT JOIN users u ON uc.user_id = u.user_id
+      WHERE 1=1
+    `;
+
+    const values = [];
+    let index = 1;
+
+    // Determine which column to filter based on dateType
+    const dateColumn = `uc.${dateType}`;
+
+    // Filter by date range based on selected dateType
+    if (start && end) {
+      query += ` AND ${dateColumn} BETWEEN $${index}::date AND $${
+        index + 1
+      }::date`;
+      values.push(start, end);
+      index += 2;
+    } else if (start) {
+      // Only start date provided
+      query += ` AND ${dateColumn} >= $${index}::date`;
+      values.push(start);
+      index += 1;
+    } else if (end) {
+      // Only end date provided
+      query += ` AND ${dateColumn} <= $${index}::date`;
+      values.push(end);
+      index += 1;
+    }
+
+    // Filter by certificate status (valid / expired)
+    if (certificate_status) {
+      if (certificate_status.toLowerCase() === "expired") {
+        query += ` AND uc.expired_date IS NOT NULL AND uc.expired_date < CURRENT_DATE`;
+      } else if (certificate_status.toLowerCase() === "valid") {
+        query += ` AND (uc.expired_date IS NULL OR uc.expired_date >= CURRENT_DATE)`;
+      }
+    }
+
+    // Sort by the selected date type
+    query += ` ORDER BY ${dateColumn} DESC`;
+
+    const result = await client.query(query, values);
+
+    if (result.rows.length === 0) {
+      return sendBadRequestResponse(
+        res,
+        "No user certificate data found for export."
+      );
+    }
+
+    // Format all date fields to WIB format
+    const formattedRows = result.rows.map((row) => ({
+      ...row,
+      issued_date: row.issued_date,
+      expired_date: row.expired_date,
+      verification_date: formatDateToWIB(row.verification_date),
+      created_at: formatDateToWIB(row.created_at),
+    }));
+
+    // Create Excel workbook
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("User Certificates");
+
+    // Define columns in logical order
+    worksheet.columns = [
+      { header: "User Certificate ID", key: "user_certificate_id", width: 30 },
+      { header: "Certificate Status", key: "certificate_status", width: 18 },
+      { header: "Certificate Number", key: "certificate_number", width: 30 },
+      { header: "Issued Date", key: "issued_date", width: 15 },
+      { header: "Expired Date", key: "expired_date", width: 15 },
+      {
+        header: "Certificate Fullname",
+        key: "certificate_fullname",
+        width: 30,
+      },
+      { header: "Certificate Type", key: "cert_type", width: 25 },
+      { header: "Issuer", key: "issuer", width: 30 },
+      { header: "Certificate File", key: "cert_file", width: 35 },
+      { header: "Status", key: "status", width: 12 },
+      { header: "Status Label", key: "status_label", width: 15 },
+      { header: "Verified By", key: "verified_by", width: 25 },
+      { header: "Verification Date", key: "verification_date", width: 22 },
+      {
+        header: "Original Certificate Number",
+        key: "original_number",
+        width: 30,
+      },
+      { header: "Created At", key: "created_at", width: 22 },
+      { header: "Notes", key: "notes", width: 40 },
+      { header: "User ID", key: "user_id", width: 25 },
+      { header: "User Fullname", key: "user_fullname", width: 30 },
+      { header: "Email", key: "email", width: 30 },
+      { header: "Phone Number", key: "phone_number", width: 18 },
+      { header: "Institution", key: "institution", width: 40 },
+      { header: "Position", key: "position", width: 30 },
+    ];
+
+    worksheet.addRows(formattedRows);
+
+    // Apply styling to header row
+    const headerRow = worksheet.getRow(1);
+    headerRow.font = { bold: true };
+    headerRow.alignment = { vertical: "middle", horizontal: "center" };
+
+    // Apply borders to all cells
+    worksheet.eachRow((row) => {
+      worksheet.columns.forEach((_, colIndex) => {
+        const cell = row.getCell(colIndex + 1);
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        };
+      });
+      row.height = 20;
+    });
+
+    // Generate Excel buffer and send response
+    const buffer = await workbook.xlsx.writeBuffer();
+    const timestamp = generateTimestampWIB();
+    const filename = `user_certificates_export_${timestamp}.xlsx`;
+
+    res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader("Content-Length", buffer.length);
+    res.send(buffer);
+  } catch (err) {
+    console.error("Error exporting user certificates:", err);
+    res.status(500).json({
+      message: "Failed to export user certificate data",
+      error: err.message,
+    });
+  } finally {
+    client.release();
+  }
+};
