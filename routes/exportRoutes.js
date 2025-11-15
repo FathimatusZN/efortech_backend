@@ -7,6 +7,7 @@ const {
   exportRegistrationsCompleted,
   exportRegistrationsCancelled,
   exportTrainingCertificates,
+  exportUserCertificates,
 } = require("../controllers/exportController");
 const { verifyToken, verifyRoles } = require("../middlewares/authMiddleware");
 
@@ -51,6 +52,14 @@ router.get(
   verifyToken,
   verifyRoles(["role2", "role3"]),
   exportTrainingCertificates
+);
+
+// GET /api/export/usercertificates - Export User uploaded certificates
+router.get(
+  "/usercertificates",
+  verifyToken,
+  verifyRoles(["role2", "role3"]),
+  exportUserCertificates
 );
 
 module.exports = router;
