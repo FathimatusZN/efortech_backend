@@ -949,3 +949,230 @@ exports.exportRegistrationsCancelled = async (req, res) => {
     client.release();
   }
 };
+
+// Export Registration Training Certificate
+exports.exportTrainingCertificates = async (req, res) => {
+  const {
+    start,
+    end,
+    dateType = "issued_date", // issued_date / expired_date / training_date / completed_date / registration_date
+    training_id,
+    certificate_status, // valid / expired
+  } = req.query;
+  const client = await db.connect();
+  try {
+    // Validate dateType
+    const validDateTypes = [
+      "issued_date",
+      "expired_date",
+      "training_date",
+      "completed_date",
+      "registration_date",
+    ];
+    if (!validDateTypes.includes(dateType)) {
+      return sendBadRequestResponse(res, "Invalid date type filter.");
+    }
+    // Base query with all required joins
+    let query = `
+      SELECT 
+        c.certificate_id,
+        c.certificate_number,
+        c.issued_date,
+        c.expired_date,
+        c.cert_file,
+        CASE 
+          WHEN c.expired_date IS NULL THEN 'Valid'
+          WHEN c.expired_date < CURRENT_DATE THEN 'Expired'
+          ELSE 'Valid'
+        END AS certificate_status,
+        r.registration_id,
+        r.registration_date,
+        r.training_date,
+        r.completed_date,
+        rp.registration_participant_id,
+        rp.advantech_cert,
+        u.user_id,
+        u.fullname,
+        u.email,
+        u.phone_number,
+        u.institution,
+        u.position,
+        t.training_id,
+        t.training_name
+      FROM certificate c
+      JOIN registration_participant rp ON c.registration_participant_id = rp.registration_participant_id
+      JOIN registration r ON rp.registration_id = r.registration_id
+      JOIN users u ON rp.user_id = u.user_id
+      JOIN training t ON r.training_id = t.training_id
+      WHERE 1=1
+    `;
+    const values = [];
+    let index = 1;
+
+    // Determine which column to filter based on dateType
+    let dateColumn;
+    let isDateOnly = false; // untuk kolom dengan tipe date (bukan timestamp)
+
+    if (dateType === "issued_date" || dateType === "expired_date") {
+      dateColumn = `c.${dateType}`;
+      isDateOnly = true;
+    } else if (dateType === "training_date") {
+      dateColumn = "r.training_date";
+      isDateOnly = true;
+    } else if (dateType === "registration_date") {
+      dateColumn = "r.registration_date";
+      isDateOnly = false; // timestamp
+    } else if (dateType === "completed_date") {
+      dateColumn = "r.completed_date";
+      isDateOnly = false; // timestamp
+    }
+
+    // Filter by date range based on selected dateType
+    if (start && end) {
+      if (isDateOnly) {
+        // For date columns
+        query += ` AND ${dateColumn} BETWEEN $${index}::date AND $${
+          index + 1
+        }::date`;
+      } else {
+        // For timestamp columns - end date includes full day (23:59:59)
+        query += ` AND ${dateColumn} BETWEEN $${index}::timestamp AND $${
+          index + 1
+        }::timestamp + INTERVAL '23 hours 59 minutes 59 seconds'`;
+      }
+      values.push(start, end);
+      index += 2;
+    } else if (start) {
+      // Only start date provided
+      if (isDateOnly) {
+        query += ` AND ${dateColumn} >= $${index}::date`;
+      } else {
+        query += ` AND ${dateColumn} >= $${index}::timestamp`;
+      }
+      values.push(start);
+      index += 1;
+    } else if (end) {
+      // Only end date provided
+      if (isDateOnly) {
+        query += ` AND ${dateColumn} <= $${index}::date`;
+      } else {
+        query += ` AND ${dateColumn} <= $${index}::timestamp + INTERVAL '23 hours 59 minutes 59 seconds'`;
+      }
+      values.push(end);
+      index += 1;
+    }
+
+    // Filter by training_id
+    if (training_id) {
+      query += ` AND r.training_id = $${index}`;
+      values.push(training_id);
+      index++;
+    }
+
+    // Filter by certificate status (valid / expired)
+    if (certificate_status) {
+      if (certificate_status.toLowerCase() === "expired") {
+        query += ` AND c.expired_date IS NOT NULL AND c.expired_date < CURRENT_DATE`;
+      } else if (certificate_status.toLowerCase() === "valid") {
+        query += ` AND (c.expired_date IS NULL OR c.expired_date >= CURRENT_DATE)`;
+      }
+    }
+
+    // Sort by the selected date type
+    query += ` ORDER BY ${dateColumn} DESC`;
+
+    const result = await client.query(query, values);
+
+    if (result.rows.length === 0) {
+      return sendBadRequestResponse(
+        res,
+        "No training certificate data found for export."
+      );
+    }
+
+    // Format all date fields to WIB format
+    const formattedRows = result.rows.map((row) => ({
+      ...row,
+      issued_date: row.issued_date,
+      expired_date: row.expired_date,
+      registration_date: formatDateToWIB(row.registration_date),
+      training_date: row.training_date,
+      completed_date: formatDateToWIB(row.completed_date),
+    }));
+
+    // Create Excel workbook
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Training Certificates");
+
+    // Define columns in logical order
+    worksheet.columns = [
+      { header: "Certificate ID", key: "certificate_id", width: 25 },
+      { header: "Certificate Number", key: "certificate_number", width: 30 },
+      { header: "Certificate Status", key: "certificate_status", width: 18 },
+      { header: "Issued Date", key: "issued_date", width: 15 },
+      { header: "Expired Date", key: "expired_date", width: 15 },
+      { header: "Certificate File", key: "cert_file", width: 35 },
+      { header: "Advantech Certificate", key: "advantech_cert", width: 35 },
+      { header: "Registration ID", key: "registration_id", width: 25 },
+      { header: "Registration Date", key: "registration_date", width: 22 },
+      { header: "Training Date", key: "training_date", width: 15 },
+      { header: "Completed Date", key: "completed_date", width: 22 },
+      {
+        header: "Participant ID",
+        key: "registration_participant_id",
+        width: 25,
+      },
+      { header: "User ID", key: "user_id", width: 25 },
+      { header: "Full Name", key: "fullname", width: 25 },
+      { header: "Email", key: "email", width: 30 },
+      { header: "Phone Number", key: "phone_number", width: 18 },
+      { header: "Institution", key: "institution", width: 40 },
+      { header: "Position", key: "position", width: 30 },
+      { header: "Training ID", key: "training_id", width: 22 },
+      { header: "Training Name", key: "training_name", width: 35 },
+    ];
+
+    worksheet.addRows(formattedRows);
+
+    // Apply styling to header row
+    const headerRow = worksheet.getRow(1);
+    headerRow.font = { bold: true };
+    headerRow.alignment = { vertical: "middle", horizontal: "center" };
+
+    // Apply borders to all cells
+    worksheet.eachRow((row) => {
+      worksheet.columns.forEach((_, colIndex) => {
+        const cell = row.getCell(colIndex + 1);
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        };
+      });
+      row.height = 20;
+    });
+
+    // Generate Excel buffer and send response
+    const buffer = await workbook.xlsx.writeBuffer();
+    const timestamp = generateTimestampWIB();
+    const filename = `training_certificates_export_${timestamp}.xlsx`;
+
+    res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader("Content-Length", buffer.length);
+    res.send(buffer);
+  } catch (err) {
+    console.error("Error exporting training certificates:", err);
+    res.status(500).json({
+      message: "Failed to export training certificate data",
+      error: err.message,
+    });
+  } finally {
+    client.release();
+  }
+};
