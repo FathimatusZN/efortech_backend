@@ -8,6 +8,7 @@ const {
   getRegistrationsByStatus,
   savePaymentProof,
   searchRegistrations,
+  checkUserRegistration,
 } = require("../controllers/registrationController");
 const uploadFile = require("../middlewares/fileUpload");
 const {
@@ -26,6 +27,9 @@ router.get("/status", getRegistrationsByStatus);
 
 // GET /api/registration/search - Search registrations various criteria
 router.get("/search", searchRegistrations);
+
+// GET /api/registration/check/:user_id/:training_id - Check if user already registered
+router.get("/check/:user_id/:training_id", checkUserRegistration);
 
 // GET /api/registration/:registration_id - Get registration by ID with participant info
 router.get("/:registration_id", getRegistrationById);

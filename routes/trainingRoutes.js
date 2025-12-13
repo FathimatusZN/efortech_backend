@@ -7,7 +7,8 @@ const {
   softDeleteTraining,
   getTrainings,
   getTrainingById,
-  searchTraining,
+  deleteTrainingWithRelations,
+  checkTrainingRelations,
 } = require("../controllers/trainingController");
 const uploadFile = require("../middlewares/imageUpload");
 const {
@@ -21,6 +22,9 @@ router.get("/", getTrainings);
 // Get detail training by ID
 router.get("/id/:training_id", getTrainingById);
 
+// Check training relations (new endpoint)
+router.get("/check-relations/:training_id", checkTrainingRelations);
+
 // Add training
 router.post("/", addTraining);
 
@@ -29,6 +33,12 @@ router.put("/update/:training_id", updateTraining);
 
 // Delete training
 router.delete("/delete/:training_id", deleteTraining);
+
+// Delete training with relations
+router.delete(
+  "/delete-with-relations/:training_id",
+  deleteTrainingWithRelations
+);
 
 // Soft delete (archive)
 router.put("/archive/:training_id", softDeleteTraining);
