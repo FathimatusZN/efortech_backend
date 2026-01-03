@@ -14,21 +14,24 @@ const getCertificateStatus = (expiredDate) => {
   return today <= expiry ? "Valid" : "Expired";
 };
 
+// Function to generate a custom ID with prefix + timestamp + 6-char random string
 const generateCustomId = (prefix) => {
   const now = new Date();
-  now.setHours(now.getHours() + 7);
+  now.setHours(now.getHours() + 7); // UTC+7 (WIB timezone)
   const timestamp = now
     .toISOString()
     .replace(/[-T:.Z]/g, "")
     .slice(0, 12);
   const randomStr = uuidv4().slice(0, 6).toUpperCase();
-  return `${prefix}-${timestamp}-${randomStr}`;
+  return `${prefix}-${timestamp}-${randomStr}`; // Format: PREFIX-YYYYMMDDHHMM-RANDOM
 };
 
+// Function to check if certificate number contains invalid characters (for URL : /?#&)
 const encodeCertificateNumber = (number) => {
   return number.replace(/[^a-zA-Z0-9\-]/g, "_");
 };
 
+// Function to generate random certificate number (10 chars uppercase + digits)
 const generateRandomCertNumber = () => {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   let result = "";
@@ -38,6 +41,7 @@ const generateRandomCertNumber = () => {
   return result;
 };
 
+// Function to ensure uniqueness of generated cert number
 const generateUniqueCertificateNumber = async (client) => {
   let unique = false;
   let randomNumber;
@@ -63,10 +67,12 @@ const generateUniqueCertificateNumber = async (client) => {
   return randomNumber;
 };
 
+// Helper function to process certificate number input
 const processCertificateNumber = async (certificate_number, client) => {
   let finalCertNumber = certificate_number;
   let originalNumber = null;
 
+  // normalize input -> string, trim space, remove quotes mark
   const normalized = String(certificate_number)
     .trim()
     .replace(/^['"]|['"]$/g, "");
@@ -95,7 +101,7 @@ exports.createUserCertificate = async (req, res) => {
     issued_date,
     expired_date,
     certificate_number,
-    cert_file, // Now expecting an array
+    cert_file,
   } = req.body;
 
   // Required field validation
@@ -110,21 +116,9 @@ exports.createUserCertificate = async (req, res) => {
     return sendBadRequestResponse(res, "Incomplete certificate data");
   }
 
-  // Validate cert_file is array with 1-3 items
-  if (
-    !Array.isArray(cert_file) ||
-    cert_file.length === 0 ||
-    cert_file.length > 3
-  ) {
-    return sendBadRequestResponse(
-      res,
-      "cert_file must be an array with 1-3 URLs"
-    );
-  }
-
   const client = await db.connect();
   try {
-    await client.query("BEGIN");
+    await client.query("BEGIN"); // Start transaction
 
     const user_certificate_id = generateCustomId("UCRT");
     const { finalCertNumber, originalNumber } = await processCertificateNumber(
@@ -153,7 +147,7 @@ exports.createUserCertificate = async (req, res) => {
         expired_date || null,
         finalCertNumber,
         originalNumber,
-        cert_file, // PostgreSQL will automatically handle array
+        cert_file,
       ]
     );
 
@@ -185,8 +179,8 @@ exports.createUserCertificateByAdmin = async (req, res) => {
     issued_date,
     expired_date,
     certificate_number,
-    cert_file, // Now expecting an array
-    admin_id,
+    cert_file,
+    admin_id, // comes from frontend auth
     notes,
   } = req.body;
 
@@ -200,18 +194,6 @@ exports.createUserCertificateByAdmin = async (req, res) => {
     !admin_id
   ) {
     return sendBadRequestResponse(res, "Missing required certificate data");
-  }
-
-  // Validate cert_file is array with 1-3 items
-  if (
-    !Array.isArray(cert_file) ||
-    cert_file.length === 0 ||
-    cert_file.length > 3
-  ) {
-    return sendBadRequestResponse(
-      res,
-      "cert_file must be an array with 1-3 URLs"
-    );
   }
 
   const client = await db.connect();
@@ -282,7 +264,9 @@ exports.updateUserCertificateStatus = async (req, res) => {
   try {
     await client.query("BEGIN");
 
+    // Step 1: If updating to "Accepted", check for conflicts (duplicate accepted certificate_number)
     if (status === 2) {
+      // Fetch certificate_number and original_number of the certificate to be updated
       const certNumberResult = await client.query(
         `
         SELECT certificate_number, original_number
@@ -299,6 +283,7 @@ exports.updateUserCertificateStatus = async (req, res) => {
 
       const { certificate_number, original_number } = certNumberResult.rows[0];
 
+      // Check if another Accepted certificate exists with the same certificate_number or original_number
       const conflictCheck = await client.query(
         `
         SELECT COUNT(*) 
@@ -329,6 +314,7 @@ exports.updateUserCertificateStatus = async (req, res) => {
       }
     }
 
+    // Step 2: Proceed with updating status
     const query = `
       UPDATE user_certificates
       SET 
@@ -402,6 +388,7 @@ exports.getUserCertificates = async (req, res) => {
       verified_by: row.verified_by
         ? `${row.verified_by} (${row.verified_by_name})`
         : null,
+      validity_status: getCertificateStatus(row.expired_date),
     }));
 
     return sendSuccessResponse(res, "Certificates retrieved", certificates);
@@ -615,12 +602,13 @@ exports.searchUserCertificates = async (req, res) => {
       verified_by: row.verified_by
         ? `${row.verified_by} (${row.verified_by_name})`
         : null,
+      validity_status: getCertificateStatus(row.expired_date),
     }));
 
     return sendSuccessResponse(res, "Search results", results);
   } catch (err) {
     console.error("Search certificate error:", err);
-    return sendErrorResponse(res, "Search certificates", err.message);
+    return sendErrorResponse(res, "Failed to search certificates", err.message);
   } finally {
     client.release();
   }
