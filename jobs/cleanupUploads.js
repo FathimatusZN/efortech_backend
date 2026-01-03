@@ -36,7 +36,7 @@ async function cleanupUnusedUploads() {
       UNION
       SELECT unnest(images) AS url FROM training WHERE images IS NOT NULL
       UNION
-      SELECT advantech_cert AS url FROM registration_participant WHERE advantech_cert IS NOT NULL
+      SELECT unnest(advantech_cert) AS url FROM registration_participant WHERE advantech_cert IS NOT NULL
     `);
 
     // 2. Extract relative file paths
