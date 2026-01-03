@@ -1,3 +1,4 @@
+// efortech_backend\routes\userCertificateRoutes.js
 const express = require("express");
 const router = express.Router();
 const {
@@ -7,6 +8,9 @@ const {
   getUserCertificateById,
   searchUserCertificates,
   updateUserCertificateStatus,
+  deleteUserCertificate,
+  deleteMultipleUserCertificates,
+  deleteAllRejectedUserCertificates,
 } = require("../controllers/userCertificateController");
 const uploadFile = require("../middlewares/fileUpload");
 const {
@@ -31,6 +35,15 @@ router.get("/search", searchUserCertificates);
 
 // GET /api/ucertificate/:id - get user certificate by ID
 router.get("/:id", getUserCertificateById);
+
+// DELETE /api/ucertificate/delete-all-rejected - Delete all rejected certificates
+router.delete("/delete-all-rejected", deleteAllRejectedUserCertificates);
+
+// DELETE /api/ucertificate/delete-multiple - Delete multiple selected certificates
+router.delete("/delete-multiple", deleteMultipleUserCertificates);
+
+// DELETE /api/ucertificate/:user_certificate_id - Delete a single certificate
+router.delete("/:user_certificate_id", deleteUserCertificate);
 
 // Upload certificate file
 router.post("/upload-ucertificate", uploadFile, (req, res) => {

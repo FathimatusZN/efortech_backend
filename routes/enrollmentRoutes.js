@@ -13,28 +13,32 @@ const {
   sendErrorResponse,
 } = require("../utils/responseUtils");
 
-// GET /api/registration/participants - Get completed registration participants
+// GET /api/enrollment/participants - Get completed registration participants
 router.get("/participants", getCompletedParticipants);
 
-// GET /api/registration/history/:user_id - Get training history for a specific user
+// GET /api/enrollment/history/:user_id - Get training history for a specific user
 router.get("/history/:user_id", getUserTrainingHistory);
 
-// PUT /api/registration/attendance/:registration_participant_id - Update attendance status
+// PUT /api/enrollment/attendance/:registration_participant_id - Update attendance status
 router.put("/attendance/:registration_participant_id", updateAttendanceStatus);
 
-// PUT /api/registration/attendances - Update multiple attendance status
+// PUT /api/enrollment/attendances - Update multiple attendance status
 router.put("/attendances", updateMultipleAttendanceStatus);
 
-// PUT /api/registration/update-advantech-link - save advantech certificate link
+// PUT /api/enrollment/update-advantech-link - save advantech certificate links (supports multiple files)
 router.put("/update-advantech-link", updateAdvantechCertificate);
 
-// Upload advantech certificate file
+// POST /api/enrollment/upload-advantech-certificate - Upload advantech certificate files (1-3 files)
 router.post("/upload-advantech-certificate", uploadFile, (req, res) => {
-  if (!req.files || req.files.length === 0 || !req.files[0].fullUrl) {
-    return sendErrorResponse(res, "Failed Upload");
+  if (!req.files || req.files.length === 0) {
+    return sendErrorResponse(res, "Failed Upload: No files uploaded");
   }
+
+  const fileUrls = req.files.map((file) => file.fullUrl);
+
   return sendSuccessResponse(res, "Upload successful", {
-    fileUrl: req.files[0].fullUrl,
+    fileUrls,
+    count: fileUrls.length,
   });
 });
 

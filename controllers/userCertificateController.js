@@ -613,3 +613,152 @@ exports.searchUserCertificates = async (req, res) => {
     client.release();
   }
 };
+
+// Function to permanently delete a single user certificate
+exports.deleteUserCertificate = async (req, res) => {
+  const { user_certificate_id } = req.params;
+
+  if (!user_certificate_id) {
+    return sendBadRequestResponse(res, "User certificate ID is required");
+  }
+
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+
+    // Check if certificate exists and is rejected (status = 3)
+    const certCheck = await client.query(
+      `SELECT user_certificate_id, status FROM user_certificates WHERE user_certificate_id = $1`,
+      [user_certificate_id]
+    );
+
+    if (certCheck.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return sendErrorResponse(res, "User certificate not found", null, 404);
+    }
+
+    if (certCheck.rows[0].status !== 3) {
+      await client.query("ROLLBACK");
+      return sendBadRequestResponse(
+        res,
+        "Only rejected certificates can be deleted"
+      );
+    }
+
+    // Delete the certificate
+    await client.query(
+      `DELETE FROM user_certificates WHERE user_certificate_id = $1`,
+      [user_certificate_id]
+    );
+
+    await client.query("COMMIT");
+
+    return sendSuccessResponse(res, "User certificate deleted successfully", {
+      user_certificate_id,
+    });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("Delete user certificate error:", err);
+    return sendErrorResponse(res, "Failed to delete user certificate");
+  } finally {
+    client.release();
+  }
+};
+
+// Function to delete multiple selected user certificates
+exports.deleteMultipleUserCertificates = async (req, res) => {
+  const { user_certificate_ids } = req.body;
+
+  if (
+    !Array.isArray(user_certificate_ids) ||
+    user_certificate_ids.length === 0
+  ) {
+    return sendBadRequestResponse(res, "No user certificate IDs provided");
+  }
+
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+
+    // Check which certificates exist and are rejected
+    const certCheck = await client.query(
+      `SELECT user_certificate_id FROM user_certificates WHERE user_certificate_id = ANY($1) AND status = 3`,
+      [user_certificate_ids]
+    );
+
+    const validIds = certCheck.rows.map((row) => row.user_certificate_id);
+
+    if (validIds.length === 0) {
+      await client.query("ROLLBACK");
+      return sendBadRequestResponse(
+        res,
+        "No valid rejected certificates found to delete"
+      );
+    }
+
+    // Delete the certificates
+    const deleteResult = await client.query(
+      `DELETE FROM user_certificates WHERE user_certificate_id = ANY($1)`,
+      [validIds]
+    );
+
+    await client.query("COMMIT");
+
+    return sendSuccessResponse(
+      res,
+      "Selected user certificates deleted successfully",
+      {
+        deleted_certificates: deleteResult.rowCount,
+      }
+    );
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("Delete multiple user certificates error:", err);
+    return sendErrorResponse(res, "Failed to delete selected certificates");
+  } finally {
+    client.release();
+  }
+};
+
+// Function to delete all rejected user certificates
+exports.deleteAllRejectedUserCertificates = async (req, res) => {
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+
+    // Get all rejected certificates
+    const certResult = await client.query(
+      `SELECT user_certificate_id FROM user_certificates WHERE status = 3`
+    );
+
+    const rejectedIds = certResult.rows.map((row) => row.user_certificate_id);
+
+    if (rejectedIds.length === 0) {
+      await client.query("ROLLBACK");
+      return sendSuccessResponse(res, "No rejected certificates to delete", {
+        deleted_certificates: 0,
+      });
+    }
+
+    // Delete all rejected certificates
+    const deleteResult = await client.query(
+      `DELETE FROM user_certificates WHERE status = 3`
+    );
+
+    await client.query("COMMIT");
+
+    return sendSuccessResponse(
+      res,
+      "All rejected user certificates deleted successfully",
+      {
+        deleted_certificates: deleteResult.rowCount,
+      }
+    );
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("Delete all rejected certificates error:", err);
+    return sendErrorResponse(res, "Failed to delete all rejected certificates");
+  } finally {
+    client.release();
+  }
+};

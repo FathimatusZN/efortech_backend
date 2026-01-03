@@ -657,3 +657,259 @@ exports.checkUserRegistration = async (req, res) => {
     client.release();
   }
 };
+
+// Function to permanently delete a single registration and all related data
+exports.deleteRegistration = async (req, res) => {
+  const { registration_id } = req.params;
+
+  if (!registration_id) {
+    return sendBadRequestResponse(res, "Registration ID is required");
+  }
+
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+
+    // Check if registration exists and is cancelled (status = 5)
+    const regCheck = await client.query(
+      `SELECT registration_id, status FROM registration WHERE registration_id = $1`,
+      [registration_id]
+    );
+
+    if (regCheck.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return sendNotFoundResponse(res, "Registration not found");
+    }
+
+    if (regCheck.rows[0].status !== 5) {
+      await client.query("ROLLBACK");
+      return sendBadRequestResponse(
+        res,
+        "Only cancelled registrations can be deleted"
+      );
+    }
+
+    // Get all participant IDs related to this registration
+    const participantsResult = await client.query(
+      `SELECT registration_participant_id FROM registration_participant WHERE registration_id = $1`,
+      [registration_id]
+    );
+
+    const participantIds = participantsResult.rows.map(
+      (row) => row.registration_participant_id
+    );
+
+    // Delete related data in order (respecting foreign key constraints)
+    if (participantIds.length > 0) {
+      // Delete reviews
+      await client.query(
+        `DELETE FROM review WHERE registration_participant_id = ANY($1)`,
+        [participantIds]
+      );
+
+      // Delete certificates
+      await client.query(
+        `DELETE FROM certificate WHERE registration_participant_id = ANY($1)`,
+        [participantIds]
+      );
+    }
+
+    // Delete registration participants
+    await client.query(
+      `DELETE FROM registration_participant WHERE registration_id = $1`,
+      [registration_id]
+    );
+
+    // Delete the registration itself
+    await client.query(`DELETE FROM registration WHERE registration_id = $1`, [
+      registration_id,
+    ]);
+
+    await client.query("COMMIT");
+
+    return sendSuccessResponse(res, "Registration data deleted successfully", {
+      registration_id,
+      deleted_participants: participantIds.length,
+    });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("Delete registration error:", err);
+    return sendErrorResponse(res, "Failed to delete registration data");
+  } finally {
+    client.release();
+  }
+};
+
+// Function to delete multiple selected registrations
+exports.deleteMultipleRegistrations = async (req, res) => {
+  const { registration_ids } = req.body;
+
+  if (!Array.isArray(registration_ids) || registration_ids.length === 0) {
+    return sendBadRequestResponse(res, "No registration IDs provided");
+  }
+
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+
+    // Check which registrations exist and are cancelled
+    const regCheck = await client.query(
+      `SELECT registration_id FROM registration WHERE registration_id = ANY($1) AND status = 5`,
+      [registration_ids]
+    );
+
+    const validIds = regCheck.rows.map((row) => row.registration_id);
+
+    if (validIds.length === 0) {
+      await client.query("ROLLBACK");
+      return sendBadRequestResponse(
+        res,
+        "No valid cancelled registrations found to delete"
+      );
+    }
+
+    // Get all participant IDs related to these registrations
+    const participantsResult = await client.query(
+      `SELECT registration_participant_id FROM registration_participant WHERE registration_id = ANY($1)`,
+      [validIds]
+    );
+
+    const participantIds = participantsResult.rows.map(
+      (row) => row.registration_participant_id
+    );
+
+    let deletedCertificates = 0;
+    let deletedReviews = 0;
+
+    // Delete related data
+    if (participantIds.length > 0) {
+      // Delete reviews
+      const reviewResult = await client.query(
+        `DELETE FROM review WHERE registration_participant_id = ANY($1)`,
+        [participantIds]
+      );
+      deletedReviews = reviewResult.rowCount;
+
+      // Delete certificates
+      const certResult = await client.query(
+        `DELETE FROM certificate WHERE registration_participant_id = ANY($1)`,
+        [participantIds]
+      );
+      deletedCertificates = certResult.rowCount;
+    }
+
+    // Delete registration participants
+    await client.query(
+      `DELETE FROM registration_participant WHERE registration_id = ANY($1)`,
+      [validIds]
+    );
+
+    // Delete the registrations
+    await client.query(
+      `DELETE FROM registration WHERE registration_id = ANY($1)`,
+      [validIds]
+    );
+
+    await client.query("COMMIT");
+
+    return sendSuccessResponse(
+      res,
+      "Selected registration data deleted successfully",
+      {
+        deleted_registrations: validIds.length,
+        deleted_participants: participantIds.length,
+        deleted_certificates: deletedCertificates,
+        deleted_reviews: deletedReviews,
+      }
+    );
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("Delete multiple registrations error:", err);
+    return sendErrorResponse(res, "Failed to delete selected registrations");
+  } finally {
+    client.release();
+  }
+};
+
+// Function to delete all cancelled registrations
+exports.deleteAllCancelledRegistrations = async (req, res) => {
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+
+    // Get all cancelled registrations
+    const regResult = await client.query(
+      `SELECT registration_id FROM registration WHERE status = 5`
+    );
+
+    const cancelledIds = regResult.rows.map((row) => row.registration_id);
+
+    if (cancelledIds.length === 0) {
+      await client.query("ROLLBACK");
+      return sendSuccessResponse(res, "No cancelled registrations to delete", {
+        deleted_registrations: 0,
+      });
+    }
+
+    // Get all participant IDs related to these registrations
+    const participantsResult = await client.query(
+      `SELECT registration_participant_id FROM registration_participant WHERE registration_id = ANY($1)`,
+      [cancelledIds]
+    );
+
+    const participantIds = participantsResult.rows.map(
+      (row) => row.registration_participant_id
+    );
+
+    let deletedCertificates = 0;
+    let deletedReviews = 0;
+
+    // Delete related data
+    if (participantIds.length > 0) {
+      // Delete reviews
+      const reviewResult = await client.query(
+        `DELETE FROM review WHERE registration_participant_id = ANY($1)`,
+        [participantIds]
+      );
+      deletedReviews = reviewResult.rowCount;
+
+      // Delete certificates
+      const certResult = await client.query(
+        `DELETE FROM certificate WHERE registration_participant_id = ANY($1)`,
+        [participantIds]
+      );
+      deletedCertificates = certResult.rowCount;
+    }
+
+    // Delete registration participants
+    await client.query(
+      `DELETE FROM registration_participant WHERE registration_id = ANY($1)`,
+      [cancelledIds]
+    );
+
+    // Delete the registrations
+    await client.query(`DELETE FROM registration WHERE status = 5`);
+
+    await client.query("COMMIT");
+
+    return sendSuccessResponse(
+      res,
+      "All cancelled registration data deleted successfully",
+      {
+        deleted_registrations: cancelledIds.length,
+        deleted_participants: participantIds.length,
+        deleted_certificates: deletedCertificates,
+        deleted_reviews: deletedReviews,
+      }
+    );
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("Delete all cancelled registrations error:", err);
+    return sendErrorResponse(
+      res,
+      "Failed to delete all cancelled registrations"
+    );
+  } finally {
+    client.release();
+  }
+};

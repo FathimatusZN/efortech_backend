@@ -1,3 +1,4 @@
+// efortech_backend\routes\registrationRoutes.js
 const express = require("express");
 const router = express.Router();
 const {
@@ -9,6 +10,9 @@ const {
   savePaymentProof,
   searchRegistrations,
   checkUserRegistration,
+  deleteRegistration,
+  deleteMultipleRegistrations,
+  deleteAllCancelledRegistrations,
 } = require("../controllers/registrationController");
 const uploadFile = require("../middlewares/fileUpload");
 const {
@@ -37,8 +41,17 @@ router.get("/:registration_id", getRegistrationById);
 // PUT /api/registration/:registration_id - Update registration status
 router.put("/update/:registration_id", updateRegistrationStatus);
 
-/// PUT /api/registration/save-payment - Save payment proof
+// PUT /api/registration/save-payment - Save payment proof
 router.put("/save-payment", savePaymentProof);
+
+// DELETE /api/registration/delete-all-cancelled - Delete all cancelled registrations
+router.delete("/delete-all-cancelled", deleteAllCancelledRegistrations);
+
+// DELETE /api/registration/delete-multiple - Delete multiple selected registrations
+router.delete("/delete-multiple", deleteMultipleRegistrations);
+
+// DELETE /api/registration/:registration_id - Delete a single registration
+router.delete("/:registration_id", deleteRegistration);
 
 // Upload payment proof file
 router.post("/upload-payment", uploadFile, (req, res) => {
