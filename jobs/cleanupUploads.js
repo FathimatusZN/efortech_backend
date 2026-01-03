@@ -20,7 +20,7 @@ async function cleanupUnusedUploads() {
 
     // 1. Query active URLs from DB
     const { rows } = await db.query(`
-      SELECT cert_file AS url FROM user_certificates WHERE cert_file IS NOT NULL
+      SELECT unnest(cert_file) AS url FROM user_certificates WHERE cert_file IS NOT NULL
       UNION
       SELECT payment_proof AS url FROM registration WHERE payment_proof IS NOT NULL
       UNION
