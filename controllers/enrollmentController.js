@@ -381,10 +381,9 @@ exports.getUserTrainingHistory = async (req, res) => {
   const client = await db.connect();
 
   try {
-    const { user_id } = req.params; // Get user_id from URL parameters
-    const { status } = req.query; // Optional status filter from query
+    const { user_id } = req.params;
+    const { status } = req.query;
 
-    // Base query including registration_participant_id and review existence check (has_review)
     let query = `
         SELECT 
           r.registration_id,
@@ -401,7 +400,7 @@ exports.getUserTrainingHistory = async (req, res) => {
           rp.registration_participant_id,
           rp.attendance_status,
           rp.has_certificate,
-          -- Use EXISTS to check if a review exists for the given registration_participant_id
+          rp.advantech_cert,
           EXISTS (
             SELECT 1 FROM review v 
             WHERE v.registration_participant_id = rp.registration_participant_id
@@ -414,15 +413,12 @@ exports.getUserTrainingHistory = async (req, res) => {
         WHERE u.user_id = $1
       `;
 
-    // Add optional filter for status if provided
     if (status) {
       query += ` AND r.status = $2`;
     }
 
-    // Order by training date in descending order
     query += ` ORDER BY r.training_date DESC`;
 
-    // Execute the query with appropriate parameters
     const result = await client.query(
       query,
       status ? [user_id, status] : [user_id]
@@ -448,15 +444,24 @@ exports.getUserTrainingHistory = async (req, res) => {
   }
 };
 
-// Update the Advantech certificate link for a participant
+// Update the Advantech certificate links for a participant (now supports array)
 exports.updateAdvantechCertificate = async (req, res) => {
-  const { registration_participant_id, fileUrl } = req.body;
+  const { registration_participant_id, fileUrls } = req.body;
 
-  if (!registration_participant_id || !fileUrl) {
+  if (
+    !registration_participant_id ||
+    !fileUrls ||
+    !Array.isArray(fileUrls) ||
+    fileUrls.length === 0
+  ) {
     return sendBadRequestResponse(
       res,
-      "registration_participant_id and fileUrl are required."
+      "registration_participant_id and fileUrls array are required."
     );
+  }
+
+  if (fileUrls.length > 3) {
+    return sendBadRequestResponse(res, "Maximum 3 certificate files allowed.");
   }
 
   try {
@@ -470,23 +475,24 @@ exports.updateAdvantechCertificate = async (req, res) => {
       return sendBadRequestResponse(res, "Participant not found.");
     }
 
-    // Update the Advantech certificate link
+    // Update the Advantech certificate links (as array)
     await db.query(
       `UPDATE registration_participant
        SET advantech_cert = $1
        WHERE registration_participant_id = $2`,
-      [fileUrl, registration_participant_id]
+      [fileUrls, registration_participant_id]
     );
 
     return sendSuccessResponse(
       res,
-      "Advantech certificate link updated successfully."
+      "Advantech certificate links updated successfully.",
+      { fileUrls }
     );
   } catch (err) {
     console.error("Error updating advantech_cert:", err);
     return sendErrorResponse(
       res,
-      "Failed to update Advantech certificate link.",
+      "Failed to update Advantech certificate links.",
       err.message
     );
   }
