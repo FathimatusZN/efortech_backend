@@ -1,3 +1,4 @@
+//efortech_backend\controllers\exportController.js
 const db = require("../config/db");
 const ExcelJS = require("exceljs");
 const { sendBadRequestResponse } = require("../utils/responseUtils");
@@ -1182,14 +1183,20 @@ exports.exportUserCertificates = async (req, res) => {
   const {
     start,
     end,
-    dateType = "issued_date", // issued_date / expired_date
+    dateType = "issued_date", // issued_date / expired_date / created_at / verification_date
     certificate_status, // valid / expired
+    status, // 1=pending, 2=accepted, 3=rejected
   } = req.query;
 
   const client = await db.connect();
   try {
     // Validate dateType
-    const validDateTypes = ["issued_date", "expired_date"];
+    const validDateTypes = [
+      "issued_date",
+      "expired_date",
+      "created_at",
+      "verification_date",
+    ];
     if (!validDateTypes.includes(dateType)) {
       return sendBadRequestResponse(res, "Invalid date type filter.");
     }
@@ -1237,34 +1244,66 @@ exports.exportUserCertificates = async (req, res) => {
     let index = 1;
 
     // Determine which column to filter based on dateType
-    const dateColumn = `uc.${dateType}`;
+    let dateColumn;
+    let isDateOnly = false; // for date type columns (not timestamp)
+
+    if (dateType === "issued_date" || dateType === "expired_date") {
+      dateColumn = `uc.${dateType}`;
+      isDateOnly = true;
+    } else if (dateType === "created_at" || dateType === "verification_date") {
+      dateColumn = `uc.${dateType}`;
+      isDateOnly = false; // timestamp
+    }
 
     // Filter by date range based on selected dateType
     if (start && end) {
-      query += ` AND ${dateColumn} BETWEEN $${index}::date AND $${
-        index + 1
-      }::date`;
+      if (isDateOnly) {
+        query += ` AND ${dateColumn} BETWEEN $${index}::date AND $${
+          index + 1
+        }::date`;
+      } else {
+        query += ` AND ${dateColumn} BETWEEN $${index}::timestamp AND $${
+          index + 1
+        }::timestamp + INTERVAL '23 hours 59 minutes 59 seconds'`;
+      }
       values.push(start, end);
       index += 2;
     } else if (start) {
-      // Only start date provided
-      query += ` AND ${dateColumn} >= $${index}::date`;
+      if (isDateOnly) {
+        query += ` AND ${dateColumn} >= $${index}::date`;
+      } else {
+        query += ` AND ${dateColumn} >= $${index}::timestamp`;
+      }
       values.push(start);
       index += 1;
     } else if (end) {
-      // Only end date provided
-      query += ` AND ${dateColumn} <= $${index}::date`;
+      if (isDateOnly) {
+        query += ` AND ${dateColumn} <= $${index}::date`;
+      } else {
+        query += ` AND ${dateColumn} <= $${index}::timestamp + INTERVAL '23 hours 59 minutes 59 seconds'`;
+      }
       values.push(end);
       index += 1;
     }
 
-    // Filter by certificate status (valid / expired)
+    // Filter by certificate validity status (valid / expired)
     if (certificate_status) {
       if (certificate_status.toLowerCase() === "expired") {
         query += ` AND uc.expired_date IS NOT NULL AND uc.expired_date < CURRENT_DATE`;
       } else if (certificate_status.toLowerCase() === "valid") {
         query += ` AND (uc.expired_date IS NULL OR uc.expired_date >= CURRENT_DATE)`;
       }
+    }
+
+    // Filter by status (1=pending, 2=accepted, 3=rejected)
+    if (status) {
+      const statusArray = status.split(",").map((s) => parseInt(s.trim()));
+      const placeholders = statusArray
+        .map((_, i) => `$${index + i}`)
+        .join(", ");
+      query += ` AND uc.status IN (${placeholders})`;
+      values.push(...statusArray);
+      index += statusArray.length;
     }
 
     // Sort by the selected date type
