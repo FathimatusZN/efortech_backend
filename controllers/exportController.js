@@ -1409,3 +1409,224 @@ exports.exportUserCertificates = async (req, res) => {
     client.release();
   }
 };
+
+// Export All Certificates (Training + User Upload)
+exports.exportAllCertificates = async (req, res) => {
+  const {
+    start,
+    end,
+    dateType = "issued_date", // issued_date / expired_date
+    certificate_status, // valid / expired
+    type, // 1=training, 2=user_upload (optional, if empty = all)
+  } = req.query;
+
+  const client = await db.connect();
+  try {
+    // Validate dateType
+    const validDateTypes = ["issued_date", "expired_date"];
+    if (!validDateTypes.includes(dateType)) {
+      return sendBadRequestResponse(res, "Invalid date type filter.");
+    }
+
+    // Build query for training certificates
+    let trainingQuery = `
+      SELECT 
+        'Training' AS certificate_type,
+        c.certificate_id AS id,
+        c.certificate_number,
+        c.issued_date,
+        c.expired_date,
+        c.cert_file,
+        CASE 
+          WHEN c.expired_date IS NULL THEN 'Valid'
+          WHEN c.expired_date < CURRENT_DATE THEN 'Expired'
+          ELSE 'Valid'
+        END AS certificate_status,
+        u.user_id,
+        u.fullname,
+        u.email,
+        u.phone_number,
+        u.institution,
+        u.position,
+        t.training_name AS certificate_title,
+        rp.advantech_cert,
+        NULL AS issuer,
+        NULL AS original_number
+      FROM certificate c
+      JOIN registration_participant rp ON c.registration_participant_id = rp.registration_participant_id
+      JOIN registration r ON rp.registration_id = r.registration_id
+      JOIN users u ON rp.user_id = u.user_id
+      JOIN training t ON r.training_id = t.training_id
+      WHERE 1=1
+    `;
+
+    // Build query for user uploaded certificates
+    let userQuery = `
+      SELECT 
+        'User Upload' AS certificate_type,
+        uc.user_certificate_id AS id,
+        uc.certificate_number,
+        uc.issued_date,
+        uc.expired_date,
+        uc.cert_file,
+        CASE 
+          WHEN uc.expired_date IS NULL THEN 'Valid'
+          WHEN uc.expired_date < CURRENT_DATE THEN 'Expired'
+          ELSE 'Valid'
+        END AS certificate_status,
+        u.user_id,
+        u.fullname,
+        u.email,
+        u.phone_number,
+        u.institution,
+        u.position,
+        uc.cert_type AS certificate_title,
+        NULL AS advantech_cert,
+        uc.issuer,
+        uc.original_number
+      FROM user_certificates uc
+      LEFT JOIN users u ON uc.user_id = u.user_id
+      WHERE uc.status = 2
+    `;
+
+    const values = [];
+    let index = 1;
+
+    // Apply date filter to both queries
+    const dateColumn = dateType; // issued_date or expired_date
+
+    if (start && end) {
+      trainingQuery += ` AND c.${dateColumn} BETWEEN $${index}::date AND $${
+        index + 1
+      }::date`;
+      userQuery += ` AND uc.${dateColumn} BETWEEN $${index}::date AND $${
+        index + 1
+      }::date`;
+      values.push(start, end);
+      index += 2;
+    } else if (start) {
+      trainingQuery += ` AND c.${dateColumn} >= $${index}::date`;
+      userQuery += ` AND uc.${dateColumn} >= $${index}::date`;
+      values.push(start);
+      index += 1;
+    } else if (end) {
+      trainingQuery += ` AND c.${dateColumn} <= $${index}::date`;
+      userQuery += ` AND uc.${dateColumn} <= $${index}::date`;
+      values.push(end);
+      index += 1;
+    }
+
+    // Apply certificate status filter
+    if (certificate_status) {
+      if (certificate_status.toLowerCase() === "expired") {
+        trainingQuery += ` AND c.expired_date IS NOT NULL AND c.expired_date < CURRENT_DATE`;
+        userQuery += ` AND uc.expired_date IS NOT NULL AND uc.expired_date < CURRENT_DATE`;
+      } else if (certificate_status.toLowerCase() === "valid") {
+        trainingQuery += ` AND (c.expired_date IS NULL OR c.expired_date >= CURRENT_DATE)`;
+        userQuery += ` AND (uc.expired_date IS NULL OR uc.expired_date >= CURRENT_DATE)`;
+      }
+    }
+
+    // Combine queries based on type filter
+    let finalQuery;
+    if (type === "1") {
+      // Only training certificates
+      finalQuery = trainingQuery + ` ORDER BY c.${dateColumn} DESC`;
+    } else if (type === "2") {
+      // Only user upload certificates
+      finalQuery = userQuery + ` ORDER BY uc.${dateColumn} DESC`;
+    } else {
+      // Both types
+      finalQuery = `
+        (${trainingQuery})
+        UNION ALL
+        (${userQuery})
+        ORDER BY ${dateColumn} DESC
+      `;
+    }
+
+    const result = await client.query(finalQuery, values);
+
+    if (result.rows.length === 0) {
+      return sendBadRequestResponse(
+        res,
+        "No certificate data found for export."
+      );
+    }
+
+    // Format all date fields
+    const formattedRows = result.rows.map((row) => ({
+      ...row,
+      issued_date: row.issued_date,
+      expired_date: row.expired_date,
+    }));
+
+    // Create Excel workbook
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("All Certificates");
+
+    // Define columns
+    worksheet.columns = [
+      { header: "Certificate Type", key: "certificate_type", width: 20 },
+      { header: "Certificate ID", key: "id", width: 30 },
+      { header: "Certificate Number", key: "certificate_number", width: 30 },
+      { header: "Certificate Status", key: "certificate_status", width: 18 },
+      { header: "Issued Date", key: "issued_date", width: 15 },
+      { header: "Expired Date", key: "expired_date", width: 15 },
+      { header: "Certificate Title", key: "certificate_title", width: 40 },
+      { header: "Issuer", key: "issuer", width: 30 },
+      { header: "Certificate File", key: "cert_file", width: 35 },
+      { header: "Advantech Cert", key: "advantech_cert", width: 35 },
+      { header: "Original Number", key: "original_number", width: 30 },
+      { header: "User ID", key: "user_id", width: 25 },
+      { header: "Full Name", key: "fullname", width: 30 },
+      { header: "Email", key: "email", width: 30 },
+      { header: "Phone Number", key: "phone_number", width: 18 },
+      { header: "Institution", key: "institution", width: 40 },
+      { header: "Position", key: "position", width: 30 },
+    ];
+
+    worksheet.addRows(formattedRows);
+
+    // Apply styling to header row
+    const headerRow = worksheet.getRow(1);
+    headerRow.font = { bold: true };
+    headerRow.alignment = { vertical: "middle", horizontal: "center" };
+
+    // Apply borders to all cells
+    worksheet.eachRow((row) => {
+      worksheet.columns.forEach((_, colIndex) => {
+        const cell = row.getCell(colIndex + 1);
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        };
+      });
+      row.height = 20;
+    });
+
+    // Generate Excel buffer and send response
+    const buffer = await workbook.xlsx.writeBuffer();
+    const timestamp = generateTimestampWIB();
+    const filename = `all_certificates_export_${timestamp}.xlsx`;
+
+    res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader("Content-Length", buffer.length);
+    res.send(buffer);
+  } catch (err) {
+    console.error("Error exporting all certificates:", err);
+    res.status(500).json({
+      message: "Failed to export certificate data",
+      error: err.message,
+    });
+  } finally {
+    client.release();
+  }
+};
