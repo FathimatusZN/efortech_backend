@@ -1,3 +1,4 @@
+// efortech_backend\routes\exportRoutes.js
 const express = require("express");
 const router = express.Router();
 const {
@@ -8,6 +9,7 @@ const {
   exportRegistrationsCancelled,
   exportTrainingCertificates,
   exportUserCertificates,
+  exportAllCertificates,
 } = require("../controllers/exportController");
 const { verifyToken, verifyRoles } = require("../middlewares/authMiddleware");
 
@@ -60,6 +62,14 @@ router.get(
   verifyToken,
   verifyRoles(["role2", "role3"]),
   exportUserCertificates
+);
+
+// GET /api/export/allcertificates - Export all certificates (training + user upload)
+router.get(
+  "/allcertificates",
+  verifyToken,
+  verifyRoles(["role2", "role3"]),
+  exportAllCertificates
 );
 
 module.exports = router;
