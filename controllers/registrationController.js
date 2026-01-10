@@ -48,6 +48,28 @@ exports.createRegistration = async (req, res) => {
   try {
     await client.query("BEGIN"); // Start DB transaction
 
+    // Check if training exists and is active (status = 1)
+    const trainingCheck = await client.query(
+      `SELECT training_id, status FROM training WHERE training_id = $1`,
+      [training_id]
+    );
+
+    if (trainingCheck.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return sendErrorResponse(res, "Training not found", 404);
+    }
+
+    const trainingStatus = trainingCheck.rows[0].status;
+
+    // Only allow registration for active training (status = 1)
+    if (trainingStatus !== 1) {
+      await client.query("ROLLBACK");
+      return sendBadRequestResponse(
+        res,
+        "Registration is only allowed for active training programs"
+      );
+    }
+
     const registration_id = generateCustomId("REGT");
 
     // Calculate total payment: either use `final_price` or fallback to fees * count
@@ -594,6 +616,26 @@ exports.checkUserRegistration = async (req, res) => {
 
   const client = await db.connect();
   try {
+    // Check if training exists and is active (status = 1)
+    const trainingCheck = await client.query(
+      `SELECT training_id, status FROM training WHERE training_id = $1`,
+      [training_id]
+    );
+
+    if (trainingCheck.rows.length === 0) {
+      return sendErrorResponse(res, "Training not found", 404);
+    }
+
+    const trainingStatus = trainingCheck.rows[0].status;
+
+    // Only allow checking registration for active training (status = 1)
+    if (trainingStatus !== 1) {
+      return sendBadRequestResponse(
+        res,
+        "Registration check is only allowed for active training programs"
+      );
+    }
+
     // Query to check if user is already registered in the training
     const query = `
       SELECT 
