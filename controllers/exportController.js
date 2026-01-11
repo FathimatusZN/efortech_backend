@@ -378,16 +378,109 @@ exports.exportRegistrationsOnProgress = async (req, res) => {
   const {
     start,
     end,
-    dateType = "registration_date", // registration_date / training_date / completed_date
+    dateType = "registration_date",
     attendance_status,
     training_id,
     has_review,
     has_advantech_cert,
+    mode, // Tambahan: mode untuk certnumbers
   } = req.query;
 
   const client = await db.connect();
   try {
-    // Validate dateType
+    // Special mode: Export certificate numbers only
+    if (mode === "certnumbers") {
+      const query = `
+        SELECT 
+          r.registration_id,
+          rp.registration_participant_id,
+          t.training_name,
+          u.fullname AS participant_name,
+          c.certificate_number,
+          r.training_date,
+          r.completed_date
+        FROM registration_participant rp
+        JOIN registration r ON rp.registration_id = r.registration_id
+        JOIN users u ON rp.user_id = u.user_id
+        JOIN training t ON r.training_id = t.training_id
+        LEFT JOIN certificate c ON rp.registration_participant_id = c.registration_participant_id
+        WHERE r.status = 4
+          AND rp.attendance_status = true
+          AND c.certificate_number IS NOT NULL
+          AND (c.cert_file IS NULL OR c.cert_file = '')
+        ORDER BY r.completed_date DESC
+      `;
+
+      const result = await client.query(query);
+
+      if (result.rows.length === 0) {
+        return sendBadRequestResponse(
+          res,
+          "No certificate numbers found for export."
+        );
+      }
+
+      const formattedRows = result.rows.map((row) => ({
+        ...row,
+        training_date: row.training_date,
+        completed_date: formatDateToWIB(row.completed_date),
+      }));
+
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet("Certificate Numbers");
+
+      worksheet.columns = [
+        { header: "Registration ID", key: "registration_id", width: 25 },
+        {
+          header: "Participant ID",
+          key: "registration_participant_id",
+          width: 25,
+        },
+        { header: "Training Name", key: "training_name", width: 35 },
+        { header: "Participant Name", key: "participant_name", width: 30 },
+        { header: "Certificate Number", key: "certificate_number", width: 30 },
+        { header: "Training Date", key: "training_date", width: 15 },
+        { header: "Completed Date", key: "completed_date", width: 22 },
+      ];
+
+      worksheet.addRows(formattedRows);
+
+      const headerRow = worksheet.getRow(1);
+      headerRow.font = { bold: true };
+      headerRow.alignment = { vertical: "middle", horizontal: "center" };
+
+      worksheet.eachRow((row) => {
+        worksheet.columns.forEach((_, colIndex) => {
+          const cell = row.getCell(colIndex + 1);
+          cell.border = {
+            top: { style: "thin" },
+            left: { style: "thin" },
+            bottom: { style: "thin" },
+            right: { style: "thin" },
+          };
+        });
+        row.height = 20;
+      });
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const timestamp = generateTimestampWIB();
+      const filename = `certificate_numbers_export_${timestamp}.xlsx`;
+
+      res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${filename}"`
+      );
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      );
+      res.setHeader("Content-Length", buffer.length);
+      res.send(buffer);
+      return;
+    }
+
+    // Validate dateType untuk mode normal
     if (
       !["registration_date", "training_date", "completed_date"].includes(
         dateType
@@ -396,7 +489,7 @@ exports.exportRegistrationsOnProgress = async (req, res) => {
       return sendBadRequestResponse(res, "Invalid date type filter.");
     }
 
-    // Base query
+    // Base query untuk mode normal (kode yang sudah ada sebelumnya)
     let query = `
       SELECT 
         r.registration_id,
@@ -463,7 +556,7 @@ exports.exportRegistrationsOnProgress = async (req, res) => {
       values.push(...statusArray.filter((s) => s !== null));
     }
 
-    // Filter tanggal (registration_date / training_date / completed_date)
+    // Filter tanggal
     if (start && end) {
       query += ` AND r.${dateType} BETWEEN $${index} AND $${index + 1}`;
       values.push(start, end);
@@ -477,7 +570,7 @@ exports.exportRegistrationsOnProgress = async (req, res) => {
       index++;
     }
 
-    // Filter has_review (true / false)
+    // Filter has_review
     if (has_review === "true" || has_review === "false") {
       query += ` AND (
         CASE 
@@ -490,7 +583,7 @@ exports.exportRegistrationsOnProgress = async (req, res) => {
       index++;
     }
 
-    // Filter has_advantech_cert (true: ada, false: null)
+    // Filter has_advantech_cert
     if (has_advantech_cert === "true" || has_advantech_cert === "false") {
       if (has_advantech_cert === "true") {
         query += ` AND rp.advantech_cert IS NOT NULL`;
@@ -2089,6 +2182,109 @@ exports.exportArticlesData = async (req, res) => {
     console.error("Error exporting articles data:", err);
     res.status(500).json({
       message: "Failed to export articles data",
+      error: err.message,
+    });
+  } finally {
+    client.release();
+  }
+};
+
+// Export Certificate Numbers Only (Present attendance, has cert number, no cert file)
+exports.exportCertificateNumbers = async (req, res) => {
+  const client = await db.connect();
+  try {
+    const query = `
+      SELECT 
+        r.registration_id,
+        rp.registration_participant_id,
+        t.training_name,
+        u.fullname AS participant_name,
+        c.certificate_number,
+        r.training_date,
+        r.completed_date
+      FROM registration_participant rp
+      JOIN registration r ON rp.registration_id = r.registration_id
+      JOIN users u ON rp.user_id = u.user_id
+      JOIN training t ON r.training_id = t.training_id
+      LEFT JOIN certificate c ON rp.registration_participant_id = c.registration_participant_id
+      WHERE r.status = 4
+        AND rp.attendance_status = true
+        AND c.certificate_number IS NOT NULL
+        AND (c.cert_file IS NULL OR c.cert_file = '')
+      ORDER BY r.completed_date DESC
+    `;
+
+    const result = await client.query(query);
+
+    if (result.rows.length === 0) {
+      return sendBadRequestResponse(
+        res,
+        "No certificate numbers found for export."
+      );
+    }
+
+    // Format dates
+    const formattedRows = result.rows.map((row) => ({
+      ...row,
+      training_date: row.training_date,
+      completed_date: formatDateToWIB(row.completed_date),
+    }));
+
+    // Create Excel workbook
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Certificate Numbers");
+
+    worksheet.columns = [
+      { header: "Registration ID", key: "registration_id", width: 25 },
+      {
+        header: "Participant ID",
+        key: "registration_participant_id",
+        width: 25,
+      },
+      { header: "Training Name", key: "training_name", width: 35 },
+      { header: "Participant Name", key: "participant_name", width: 30 },
+      { header: "Certificate Number", key: "certificate_number", width: 30 },
+      { header: "Training Date", key: "training_date", width: 15 },
+      { header: "Completed Date", key: "completed_date", width: 22 },
+    ];
+
+    worksheet.addRows(formattedRows);
+
+    // Style header
+    const headerRow = worksheet.getRow(1);
+    headerRow.font = { bold: true };
+    headerRow.alignment = { vertical: "middle", horizontal: "center" };
+
+    worksheet.eachRow((row) => {
+      worksheet.columns.forEach((_, colIndex) => {
+        const cell = row.getCell(colIndex + 1);
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        };
+      });
+      row.height = 20;
+    });
+
+    // Generate Excel buffer
+    const buffer = await workbook.xlsx.writeBuffer();
+    const timestamp = generateTimestampWIB();
+    const filename = `certificate_numbers_export_${timestamp}.xlsx`;
+
+    res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader("Content-Length", buffer.length);
+    res.send(buffer);
+  } catch (err) {
+    console.error("Error exporting certificate numbers:", err);
+    res.status(500).json({
+      message: "Failed to export certificate numbers",
       error: err.message,
     });
   } finally {
