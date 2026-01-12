@@ -357,3 +357,72 @@ exports.getAllUsers = async (req, res) => {
     return sendErrorResponse(res, "Failed to fetch users");
   }
 };
+
+// GET - Check user profile completeness
+exports.checkUserProfileCompletion = async (req, res) => {
+  const { user_id } = req.params;
+
+  try {
+    const result = await db.query(
+      `
+      SELECT
+        fullname,
+        email,
+        phone_number,
+        institution,
+        gender,
+        birthdate,
+        role_id,
+        role,
+        position
+      FROM users
+      WHERE user_id = $1
+      `,
+      [user_id]
+    );
+
+    if (result.rows.length === 0) {
+      return sendSuccessResponse(res, "User not found", {
+        isComplete: false,
+        missingFields: [],
+      });
+    }
+
+    const user = result.rows[0];
+
+    // field yang WAJIB diisi (user_photo dikecualikan)
+    const requiredFields = [
+      "fullname",
+      "email",
+      "phone_number",
+      "institution",
+      "gender",
+      "birthdate",
+      "role_id",
+      "role",
+      "position",
+    ];
+
+    const missingFields = [];
+
+    requiredFields.forEach((field) => {
+      const value = user[field];
+
+      if (
+        value === null ||
+        value === undefined ||
+        (typeof value === "string" && value.trim() === "")
+      ) {
+        missingFields.push(field);
+      }
+    });
+
+    return sendSuccessResponse(res, "Profile completion status fetched", {
+      isComplete: missingFields.length === 0,
+      missingFields,
+    });
+  } catch (error) {
+    console.error("Check profile completion error:", error);
+    return sendErrorResponse(res, "Failed to check profile completion");
+  }
+};

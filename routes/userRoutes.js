@@ -6,6 +6,7 @@ const {
   searchUserByEmail,
   getUserProfileNoToken,
   getAllUsers,
+  checkUserProfileCompletion,
 } = require("../controllers/userController");
 const { verifyToken, verifyRoles } = require("../middlewares/authMiddleware");
 const uploadFile = require("../middlewares/imageUpload");
@@ -27,6 +28,9 @@ router.get("/search", searchUserByEmail);
 
 // GET - User profile (no token)
 router.get("/:userId", getUserProfileNoToken);
+
+// GET - Check user profile completion
+router.get("/profile/:user_id/", checkUserProfileCompletion);
 
 // POST - Change password route
 router.post("/change-password", verifyToken, changePassword);

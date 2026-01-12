@@ -1,3 +1,4 @@
+// efortech_backend\routes\exportRoutes.js
 const express = require("express");
 const router = express.Router();
 const {
@@ -8,10 +9,13 @@ const {
   exportRegistrationsCancelled,
   exportTrainingCertificates,
   exportUserCertificates,
+  exportAllCertificates,
+  exportTrainingData,
+  exportArticlesData,
 } = require("../controllers/exportController");
 const { verifyToken, verifyRoles } = require("../middlewares/authMiddleware");
 
-// GET /api/export - Export user data (all/custom)
+// GET /api/export/users - Export user data (all/custom)
 router.get("/users", verifyToken, verifyRoles(["role3"]), exportUsers);
 
 // GET /api/export/registrations/needprocess - Export registration training data (status 1-3)
@@ -60,6 +64,30 @@ router.get(
   verifyToken,
   verifyRoles(["role2", "role3"]),
   exportUserCertificates
+);
+
+// GET /api/export/allcertificates - Export all certificates (training + user upload)
+router.get(
+  "/allcertificates",
+  verifyToken,
+  verifyRoles(["role2", "role3"]),
+  exportAllCertificates
+);
+
+// GET /api/export/training - Export training data with insights
+router.get(
+  "/training",
+  verifyToken,
+  verifyRoles(["role2", "role3"]),
+  exportTrainingData
+);
+
+// GET /api/export/articles - Export articles data
+router.get(
+  "/articles",
+  verifyToken,
+  verifyRoles(["role2", "role3"]),
+  exportArticlesData
 );
 
 module.exports = router;
