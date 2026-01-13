@@ -865,7 +865,7 @@ exports.exportRegistrationsCompleted = async (req, res) => {
       { header: "Phone Number", key: "phone_number", width: 18 },
       { header: "Email", key: "email", width: 28 },
       { header: "Institution", key: "institution", width: 40 },
-      { header: "Completion Status", key: "attendance_label", width: 18 },
+      { header: "Completion Status", key: "completion_type", width: 18 },
       { header: "Has Certificate", key: "has_certificate", width: 18 },
       { header: "Advantech Cert", key: "advantech_cert", width: 25 },
       { header: "Has Review", key: "has_review", width: 18 },
