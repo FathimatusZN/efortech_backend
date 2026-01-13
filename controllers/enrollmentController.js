@@ -331,34 +331,34 @@ exports.getCompletedParticipants = async (req, res) => {
       )`);
     }
 
-    const { completion_type } = req.query;
+    if (mode === "completed") {
+      const { completion_type } = req.query;
 
-    if (mode === "completed" && completion_type) {
-      const types = Array.isArray(completion_type)
-        ? completion_type
-        : [completion_type];
+      const types = completion_type
+        ? Array.isArray(completion_type)
+          ? completion_type
+          : [completion_type]
+        : null;
 
       const completionFilters = [];
 
-      if (types.includes("absent")) {
+      if (!types || types.includes("absent")) {
         completionFilters.push(`rp.attendance_status = false`);
       }
 
-      if (types.includes("certified")) {
+      if (!types || types.includes("certified")) {
         completionFilters.push(
-          `(rp.attendance_status = true AND rp.has_certificate = true)`
+          `(rp.attendance_status = true AND rp.has_certificate = true AND COALESCE(rp.no_certificate, false) = false)`
         );
       }
 
-      if (types.includes("no_certificate")) {
+      if (!types || types.includes("no_certificate")) {
         completionFilters.push(
           `(rp.attendance_status = true AND COALESCE(rp.no_certificate, false) = true)`
         );
       }
 
-      if (completionFilters.length > 0) {
-        filters.push(`(${completionFilters.join(" OR ")})`);
-      }
+      filters.push(`(${completionFilters.join(" OR ")})`);
     }
 
     const query = `
