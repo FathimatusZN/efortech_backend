@@ -331,12 +331,34 @@ exports.getCompletedParticipants = async (req, res) => {
       )`);
     }
 
-    if (mode === "completed") {
-      filters.push(`(
-        rp.attendance_status = false OR
-        (rp.attendance_status = true AND rp.has_certificate = true) OR
-        (rp.attendance_status = true AND COALESCE(rp.no_certificate, false) = true)
-      )`);
+    const { completion_type } = req.query;
+
+    if (mode === "completed" && completion_type) {
+      const types = Array.isArray(completion_type)
+        ? completion_type
+        : [completion_type];
+
+      const completionFilters = [];
+
+      if (types.includes("absent")) {
+        completionFilters.push(`rp.attendance_status = false`);
+      }
+
+      if (types.includes("certified")) {
+        completionFilters.push(
+          `(rp.attendance_status = true AND rp.has_certificate = true)`
+        );
+      }
+
+      if (types.includes("no_certificate")) {
+        completionFilters.push(
+          `(rp.attendance_status = true AND COALESCE(rp.no_certificate, false) = true)`
+        );
+      }
+
+      if (completionFilters.length > 0) {
+        filters.push(`(${completionFilters.join(" OR ")})`);
+      }
     }
 
     const query = `
