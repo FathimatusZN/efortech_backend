@@ -722,11 +722,13 @@ exports.exportRegistrationsCompleted = async (req, res) => {
         r.completed_date,
         rp.registration_participant_id,
         rp.attendance_status,
+        rp.has_certificate,
         CASE
-          WHEN rp.attendance_status = true THEN 'Present'
           WHEN rp.attendance_status = false THEN 'Absent'
+          WHEN rp.attendance_status = true AND rp.has_certificate = true THEN 'Certified'
+          WHEN rp.attendance_status = true AND COALESCE(rp.no_certificate, false) = true THEN 'No Certificate'
           ELSE NULL
-        END AS attendance_label,
+        END AS completion_status,
         rp.has_certificate,
         rp.advantech_cert,
         u.user_id,
@@ -865,7 +867,7 @@ exports.exportRegistrationsCompleted = async (req, res) => {
       { header: "Phone Number", key: "phone_number", width: 18 },
       { header: "Email", key: "email", width: 28 },
       { header: "Institution", key: "institution", width: 40 },
-      { header: "Completion Status", key: "completion_type", width: 18 },
+      { header: "Completion Status", key: "completion_status", width: 18 },
       { header: "Has Certificate", key: "has_certificate", width: 18 },
       { header: "Advantech Cert", key: "advantech_cert", width: 25 },
       { header: "Has Review", key: "has_review", width: 18 },
