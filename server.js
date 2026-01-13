@@ -4,6 +4,7 @@ const cors = require("cors");
 const bodyParser = require("body-parser");
 const { auth, db } = require("./config/firebase");
 const cleanupUploadsJob = require("./jobs/cleanupUploads");
+const autoCancelRegistrations = require("./jobs/autoCancelRegistrations");
 
 const app = express();
 
@@ -73,5 +74,7 @@ app.use("/uploads", express.static("uploads"));
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
-// Optional: run manually for test
+// run manually for test
 cleanupUploadsJob();
+autoCancelRegistrations();
+autoCancelRegistrations.executeCancelJob();

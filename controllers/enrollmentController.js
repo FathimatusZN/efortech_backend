@@ -1,3 +1,4 @@
+// efortech_backend\controllers\enrollmentController.js
 const db = require("../config/db");
 const {
   sendSuccessResponse,
@@ -326,15 +327,38 @@ exports.getCompletedParticipants = async (req, res) => {
     if (mode === "onprogress") {
       filters.push(`(
         rp.attendance_status IS NULL OR
-        (rp.attendance_status = true AND rp.has_certificate = false)
+        (rp.attendance_status = true AND rp.has_certificate = false AND COALESCE(rp.no_certificate, false) = false)
       )`);
     }
 
     if (mode === "completed") {
-      filters.push(`(
-        rp.attendance_status = false OR
-        (rp.attendance_status = true AND rp.has_certificate = true)
-      )`);
+      const { completion_type } = req.query;
+
+      const types = completion_type
+        ? Array.isArray(completion_type)
+          ? completion_type
+          : [completion_type]
+        : null;
+
+      const completionFilters = [];
+
+      if (!types || types.includes("absent")) {
+        completionFilters.push(`rp.attendance_status = false`);
+      }
+
+      if (!types || types.includes("certified")) {
+        completionFilters.push(
+          `(rp.attendance_status = true AND rp.has_certificate = true AND COALESCE(rp.no_certificate, false) = false)`
+        );
+      }
+
+      if (!types || types.includes("no_certificate")) {
+        completionFilters.push(
+          `(rp.attendance_status = true AND COALESCE(rp.no_certificate, false) = true)`
+        );
+      }
+
+      filters.push(`(${completionFilters.join(" OR ")})`);
     }
 
     const query = `
@@ -495,5 +519,76 @@ exports.updateAdvantechCertificate = async (req, res) => {
       "Failed to update Advantech certificate links.",
       err.message
     );
+  }
+};
+
+// Mark participant as "no certificate"
+exports.markNoCertificate = async (req, res) => {
+  const { registration_participant_id } = req.params;
+
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+
+    // Check participant exists and attended
+    const participantCheck = await client.query(
+      `SELECT rp.*, r.status 
+       FROM registration_participant rp
+       JOIN registration r ON rp.registration_id = r.registration_id
+       WHERE rp.registration_participant_id = $1`,
+      [registration_participant_id]
+    );
+
+    if (participantCheck.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return sendErrorResponse(res, "Participant not found", 404);
+    }
+
+    const participant = participantCheck.rows[0];
+
+    if (participant.status !== 4) {
+      await client.query("ROLLBACK");
+      return sendBadRequestResponse(
+        res,
+        "Can only mark 'no certificate' for completed registrations"
+      );
+    }
+
+    if (participant.attendance_status !== true) {
+      await client.query("ROLLBACK");
+      return sendBadRequestResponse(
+        res,
+        "Can only mark 'no certificate' for participants who attended"
+      );
+    }
+
+    if (participant.has_certificate) {
+      await client.query("ROLLBACK");
+      return sendBadRequestResponse(
+        res,
+        "Certificate already exists for this participant"
+      );
+    }
+
+    // Update to no_certificate
+    await client.query(
+      `UPDATE registration_participant 
+       SET no_certificate = true 
+       WHERE registration_participant_id = $1`,
+      [registration_participant_id]
+    );
+
+    await client.query("COMMIT");
+
+    return sendSuccessResponse(
+      res,
+      "Participant marked as 'no certificate' successfully"
+    );
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("Mark no certificate error:", err);
+    return sendErrorResponse(res, "Failed to mark no certificate");
+  } finally {
+    client.release();
   }
 };

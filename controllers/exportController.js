@@ -696,7 +696,7 @@ exports.exportRegistrationsCompleted = async (req, res) => {
     start,
     end,
     dateType = "registration_date", // registration_date / training_date / completed_date
-    attendance_status,
+    completion_type,
     training_id,
     has_review,
     has_advantech_cert,
@@ -722,11 +722,13 @@ exports.exportRegistrationsCompleted = async (req, res) => {
         r.completed_date,
         rp.registration_participant_id,
         rp.attendance_status,
+        rp.has_certificate,
         CASE
-          WHEN rp.attendance_status = true THEN 'Present'
           WHEN rp.attendance_status = false THEN 'Absent'
+          WHEN rp.attendance_status = true AND rp.has_certificate = true THEN 'Certified'
+          WHEN rp.attendance_status = true AND COALESCE(rp.no_certificate, false) = true THEN 'No Certificate'
           ELSE NULL
-        END AS attendance_label,
+        END AS completion_status,
         rp.has_certificate,
         rp.advantech_cert,
         u.user_id,
@@ -755,21 +757,38 @@ exports.exportRegistrationsCompleted = async (req, res) => {
       JOIN training t ON r.training_id = t.training_id
       LEFT JOIN certificate c ON rp.registration_participant_id = c.registration_participant_id
       WHERE r.status = 4
-        AND ((rp.attendance_status IS TRUE AND rp.has_certificate = true) OR rp.attendance_status = false)
     `;
 
     // Parameters
     const values = [];
     let index = 1;
 
-    // Filter attendance_status (present/absent only)
-    if (attendance_status) {
-      const statusArray = attendance_status.split(",").map((s) => s === "true"); // hanya true/false
-      const conditions = statusArray
-        .map((_, i) => `rp.attendance_status = $${index++}`)
-        .join(" OR ");
-      query += ` AND (${conditions})`;
-      values.push(...statusArray);
+    if (completion_type) {
+      const types = Array.isArray(completion_type)
+        ? completion_type
+        : [completion_type];
+
+      const completionConditions = [];
+
+      if (types.includes("absent")) {
+        completionConditions.push(`rp.attendance_status = false`);
+      }
+
+      if (types.includes("certified")) {
+        completionConditions.push(
+          `(rp.attendance_status = true AND rp.has_certificate = true)`
+        );
+      }
+
+      if (types.includes("no_certificate")) {
+        completionConditions.push(
+          `(rp.attendance_status = true AND COALESCE(rp.no_certificate, false) = true)`
+        );
+      }
+
+      if (completionConditions.length > 0) {
+        query += ` AND (${completionConditions.join(" OR ")})`;
+      }
     }
 
     // Filter tanggal (registration_date / training_date / completed_date)
@@ -848,7 +867,7 @@ exports.exportRegistrationsCompleted = async (req, res) => {
       { header: "Phone Number", key: "phone_number", width: 18 },
       { header: "Email", key: "email", width: 28 },
       { header: "Institution", key: "institution", width: 40 },
-      { header: "Attendance Status", key: "attendance_label", width: 18 },
+      { header: "Completion Status", key: "completion_status", width: 18 },
       { header: "Has Certificate", key: "has_certificate", width: 18 },
       { header: "Advantech Cert", key: "advantech_cert", width: 25 },
       { header: "Has Review", key: "has_review", width: 18 },
