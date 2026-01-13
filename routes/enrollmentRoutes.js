@@ -6,6 +6,7 @@ const {
   getCompletedParticipants,
   getUserTrainingHistory,
   updateAdvantechCertificate,
+  markNoCertificate,
 } = require("../controllers/enrollmentController");
 const uploadFile = require("../middlewares/fileUpload");
 const {
@@ -24,6 +25,9 @@ router.put("/attendance/:registration_participant_id", updateAttendanceStatus);
 
 // PUT /api/enrollment/attendances - Update multiple attendance status
 router.put("/attendances", updateMultipleAttendanceStatus);
+
+// PUT /api/enrollment/no-certificate/:registration_participant_id - Mark no certificate needed
+router.put("/no-certificate/:registration_participant_id", markNoCertificate);
 
 // PUT /api/enrollment/update-advantech-link - save advantech certificate links (supports multiple files)
 router.put("/update-advantech-link", updateAdvantechCertificate);
