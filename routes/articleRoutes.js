@@ -1,3 +1,4 @@
+// efortech_backend\routes\articleRoutes.js
 const express = require("express");
 const {
   addArticle,
@@ -9,6 +10,7 @@ const {
   getArticlesByCategory,
   getArticlesByTag,
   updateViewsArticle,
+  getMostViewedArticles,
 } = require("../controllers/articleController");
 const {
   sendSuccessResponse,
@@ -24,10 +26,13 @@ router.post("/add", addArticle);
 // Endpoint for updating article views
 router.patch("/update-views/:article_id", updateViewsArticle);
 
-// Endpoint for getting all articles
+// Endpoint for getting most viewed articles (carousel)
+router.get("/most-viewed", getMostViewedArticles);
+
+// Endpoint for getting all articles (with pagination)
 router.get("/", getArticles);
 
-// Endpoint for searching articles
+// Endpoint for searching articles (DEPRECATED - use / with search param)
 router.get("/search", searchArticles);
 
 // Endpoint for getting articles by category

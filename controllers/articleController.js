@@ -1,3 +1,4 @@
+// efortech_backend\controllers\articleController.js
 const db = require("../config/db");
 const {
   sendSuccessResponse,
@@ -5,6 +6,116 @@ const {
   sendBadRequestResponse,
   sendErrorResponse,
 } = require("../utils/responseUtils");
+
+// Get all articles WITH PAGINATION
+exports.getArticles = async (req, res) => {
+  try {
+    const {
+      sort_by = "create_date",
+      sort_order = "desc",
+      page = 1,
+      limit = 12,
+      category,
+      search,
+    } = req.query;
+
+    // Validation
+    const allowedSortBy = ["title", "create_date", "views"];
+    const allowedSortOrder = ["asc", "desc"];
+
+    const sortBy = allowedSortBy.includes(sort_by) ? sort_by : "create_date";
+    const sortOrder = allowedSortOrder.includes(sort_order.toLowerCase())
+      ? sort_order.toUpperCase()
+      : "DESC";
+
+    const pageNum = parseInt(page) || 1;
+    const limitNum = parseInt(limit) || 12;
+    const offset = (pageNum - 1) * limitNum;
+
+    // Build WHERE clause dynamically
+    let whereClause = "WHERE 1=1";
+    const queryParams = [];
+    let paramIndex = 1;
+
+    // Filter by category
+    if (category && category !== "All" && category !== "0") {
+      queryParams.push(category);
+      whereClause += ` AND category = $${paramIndex}`;
+      paramIndex++;
+    }
+
+    // Filter by search
+    if (search && search.trim()) {
+      queryParams.push(`%${search}%`);
+      whereClause += ` AND (title ILIKE $${paramIndex} OR content_body ILIKE $${paramIndex})`;
+      paramIndex++;
+    }
+
+    // Get total count
+    const countQuery = `SELECT COUNT(*) FROM articles ${whereClause}`;
+    const { rows: countRows } = await db.query(countQuery, queryParams);
+    const totalArticles = parseInt(countRows[0].count);
+
+    // Get paginated articles
+    const articlesQuery = `
+      SELECT * FROM articles 
+      ${whereClause}
+      ORDER BY ${sortBy} ${sortOrder}
+      LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+    `;
+
+    queryParams.push(limitNum, offset);
+    const { rows: articles } = await db.query(articlesQuery, queryParams);
+
+    // Process articles
+    for (const article of articles) {
+      article.images = Array.isArray(article.images) ? article.images : [];
+      article.sources = article.sources || [];
+      article.tags = article.tags || [];
+    }
+
+    // Return paginated response
+    sendSuccessResponse(res, "FETCH_SUCCESS", {
+      articles,
+      pagination: {
+        currentPage: pageNum,
+        totalPages: Math.ceil(totalArticles / limitNum),
+        totalArticles,
+        articlesPerPage: limitNum,
+        hasNextPage: pageNum < Math.ceil(totalArticles / limitNum),
+        hasPreviousPage: pageNum > 1,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching articles:", error);
+    sendErrorResponse(res, "GENERAL_ERROR");
+  }
+};
+
+// Get most viewed articles (for carousel)
+exports.getMostViewedArticles = async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 3;
+
+    const { rows: articles } = await db.query(
+      `SELECT * FROM articles 
+       ORDER BY views DESC 
+       LIMIT $1`,
+      [limit]
+    );
+
+    for (const article of articles) {
+      article.images = Array.isArray(article.images) ? article.images : [];
+      article.sources = article.sources || [];
+      article.tags = article.tags || [];
+    }
+
+    sendSuccessResponse(res, "FETCH_SUCCESS", articles);
+  } catch (error) {
+    console.error("Error fetching most viewed articles:", error);
+    sendErrorResponse(res, "GENERAL_ERROR");
+  }
+};
 
 // Add article
 exports.addArticle = async (req, res) => {
@@ -20,7 +131,6 @@ exports.addArticle = async (req, res) => {
       return sendBadRequestResponse(res, "Missing required fields");
     }
 
-    // Sources validation
     if (
       !Array.isArray(parsedSources) ||
       parsedSources.some((src) => !src.preview_text || !src.source_link)
@@ -31,12 +141,10 @@ exports.addArticle = async (req, res) => {
       );
     }
 
-    // Tags validation
     if (!Array.isArray(parsedTags)) {
       return sendBadRequestResponse(res, "Tags must be an array of strings");
     }
 
-    // article_id generation
     const create_date = new Date();
     const generateArticleId = () => {
       const now = new Date();
@@ -85,42 +193,6 @@ exports.addArticle = async (req, res) => {
   }
 };
 
-// Get all articles
-exports.getArticles = async (req, res) => {
-  try {
-    const {
-      sort_by = "create_date", // default sort by create_date
-      sort_order = "desc", // default sort direction
-    } = req.query;
-
-    // Validasi input sort_by dan sort_order
-    const allowedSortBy = ["title", "create_date", "views"];
-    const allowedSortOrder = ["asc", "desc"];
-
-    const sortBy = allowedSortBy.includes(sort_by) ? sort_by : "create_date";
-    const sortOrder = allowedSortOrder.includes(sort_order.toLowerCase())
-      ? sort_order.toUpperCase()
-      : "DESC";
-
-    const query = `SELECT * FROM articles ORDER BY ${sortBy} ${sortOrder}`;
-    const { rows: articles } = await db.query(query);
-
-    for (const article of articles) {
-      // Convert images from Buffer to base64 strings if necessary (currently not decoding binary)
-      article.images = Array.isArray(article.images) ? article.images : [];
-
-      // Ensure sources and tags are arrays
-      article.sources = article.sources || [];
-      article.tags = article.tags || [];
-    }
-
-    sendSuccessResponse(res, "FETCH_SUCCESS", articles);
-  } catch (error) {
-    console.error("Error fetching articles:", error);
-    sendErrorResponse(res, "GENERAL_ERROR");
-  }
-};
-
 // Get article by ID
 exports.getArticleById = async (req, res) => {
   try {
@@ -134,16 +206,10 @@ exports.getArticleById = async (req, res) => {
     const article = rows[0];
 
     if (!article) {
-      return sendSuccessResponse(res, `No article found with ID: + ${id}`);
+      return sendSuccessResponse(res, `No article found with ID: ${id}`);
     }
 
-    // Convert images from Buffer to base64
-    if (article.images && Array.isArray(article.images)) {
-      article.images = Array.isArray(article.images) ? article.images : [];
-    } else {
-      article.images = [];
-    }
-
+    article.images = Array.isArray(article.images) ? article.images : [];
     article.sources = article.sources || [];
     article.tags = article.tags || [];
 
@@ -158,10 +224,7 @@ exports.getArticleById = async (req, res) => {
 exports.deleteArticle = async (req, res) => {
   try {
     const { id } = req.params;
-
-    // Gak perlu hapus dari tabel tags lagi, langsung hapus artikel
     await db.query("DELETE FROM articles WHERE article_id = $1", [id]);
-
     sendSuccessResponse(res, "GENERAL_SUCCESS");
   } catch (error) {
     console.error("Error deleting article:", error);
@@ -180,7 +243,6 @@ exports.updateArticle = async (req, res) => {
       return sendBadRequestResponse(res, "All required fields must be filled");
     }
 
-    // Sources validation
     if (
       !Array.isArray(sources) ||
       sources.some((src) => !src.preview_text || !src.source_link)
@@ -191,12 +253,10 @@ exports.updateArticle = async (req, res) => {
       );
     }
 
-    // Tags validation
     if (!Array.isArray(tags)) {
       return sendBadRequestResponse(res, "Tags must be an array of strings");
     }
 
-    // Image URL validation (optional, just clean)
     const imageUrls = Array.isArray(images)
       ? images.filter(
           (url) => typeof url === "string" && url.startsWith("http")
@@ -236,15 +296,13 @@ exports.updateArticle = async (req, res) => {
   }
 };
 
-// Search articles by title or content
+// Search articles - DEPRECATED, use getArticles with search param
 exports.searchArticles = async (req, res) => {
   try {
     const { query } = req.query;
     if (!query) {
       return sendBadRequestResponse(res, "Query parameter is required");
     }
-
-    console.log("Searching for:", query);
 
     const { rows: articles } = await db.query(
       `SELECT * FROM articles 
@@ -301,8 +359,6 @@ exports.getArticlesByTag = async (req, res) => {
     if (!tag_text || tag_text.trim() === "") {
       return sendBadRequestResponse(res, "Tag parameter is required.");
     }
-
-    console.log("Searching for tag:", tag_text);
 
     const { rows: articles } = await db.query(
       `SELECT * FROM articles 
