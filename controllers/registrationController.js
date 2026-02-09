@@ -664,7 +664,8 @@ exports.checkUserRegistration = async (req, res) => {
 
       // Allow re-registration if:
       // 1. Status is cancelled (5)
-      // 2. Status is completed (4) AND attendance is false (absent)
+      // 2. Status is completed (4) AND attendance is explicitly false (absent)
+      // Note: attendance_status === null means not yet marked, so still active
       const isCancelled = data.registration_status === 5;
       const isAbsent =
         data.registration_status === 4 && data.attendance_status === false;
