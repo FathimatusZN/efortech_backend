@@ -1,3 +1,4 @@
+// efortech_backend\controllers\dashboardController.js
 const db = require("../config/db");
 const {
   sendSuccessResponse,
@@ -21,8 +22,8 @@ exports.getDashboardTodo = async (req, res) => {
             WHERE rp.attendance_status IS NULL AND r.status = 4
             ) AS unmarked_attendance,
 
-            -- Attendance marked true but no certificate yet (has_certificate = false)
-            (SELECT COUNT(*) FROM registration_participant WHERE attendance_status = true AND has_certificate = false) AS pending_certificates,
+            -- Attendance marked true but no certificate yet (has_certificate = false) and no_certificate is false or null
+            (SELECT COUNT(*) FROM registration_participant WHERE attendance_status = true AND has_certificate = false AND COALESCE(no_certificate, false) = false) AS pending_certificates,
 
             -- User uploaded certificate that need to be reviewed
             (SELECT COUNT(*) FROM user_certificates WHERE status = 1) AS pending_user_certificates
@@ -50,7 +51,7 @@ exports.getDashboardSummary = async (req, res) => {
         (SELECT COUNT(*) FROM registration) AS training_registrations,
         (SELECT COUNT(*) FROM registration WHERE status = 4) AS completed_registrations,
         (SELECT COUNT(*) FROM registration_participant) AS training_participants,
-        (SELECT COUNT(*) FROM registration_participant WHERE has_certificate = true) AS training_graduates,
+        (SELECT COUNT(*) FROM registration_participant WHERE has_certificate = true OR COALESCE(no_certificate, false) = true) AS training_graduates,
         (SELECT COUNT(*) FROM certificate) AS issued_certificates,
         (SELECT COUNT(*) FROM review) AS training_reviews,
         (SELECT SUM(total_payment) FROM registration) AS training_payments,
@@ -70,7 +71,7 @@ exports.getDashboardSummary = async (req, res) => {
     return sendSuccessResponse(
       res,
       "Dashboard summary fetched",
-      result.rows[0]
+      result.rows[0],
     );
   } catch (err) {
     console.error("Dashboard summary error:", err);
@@ -130,7 +131,7 @@ exports.getCertificateSummary = async (req, res) => {
     return sendSuccessResponse(
       res,
       "Certificate summary by training fetched",
-      result.rows
+      result.rows,
     );
   } catch (err) {
     console.error("Certificate summary error:", err);
@@ -262,7 +263,7 @@ exports.getMonthlyRegistrations = async (req, res) => {
     return sendSuccessResponse(
       res,
       "Monthly registrations fetched",
-      result.rows
+      result.rows,
     );
   } catch (err) {
     console.error("Monthly registrations error:", err);
