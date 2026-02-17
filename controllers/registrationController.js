@@ -51,7 +51,7 @@ exports.createRegistration = async (req, res) => {
     // Check if training exists and is active (status = 1)
     const trainingCheck = await client.query(
       `SELECT training_id, status FROM training WHERE training_id = $1`,
-      [training_id]
+      [training_id],
     );
 
     if (trainingCheck.rows.length === 0) {
@@ -66,7 +66,7 @@ exports.createRegistration = async (req, res) => {
       await client.query("ROLLBACK");
       return sendBadRequestResponse(
         res,
-        "Registration is only allowed for active training programs"
+        "Registration is only allowed for active training programs",
       );
     }
 
@@ -90,7 +90,7 @@ exports.createRegistration = async (req, res) => {
         participant_count,
         total_payment,
         payment_proof || null, // Store null if no proof uploaded
-      ]
+      ],
     );
 
     // Loop through the participants array to insert each into `registration_participant` table
@@ -101,7 +101,7 @@ exports.createRegistration = async (req, res) => {
         `INSERT INTO registration_participant 
           (registration_participant_id, registration_id, user_id) 
           VALUES ($1, $2, $3)`,
-        [reg_participant_id, registration_id, participant.user_id]
+        [reg_participant_id, registration_id, participant.user_id],
       );
     }
 
@@ -130,7 +130,7 @@ exports.getRegistrations = async (req, res) => {
            FROM registration r
            JOIN users u ON r.registrant_id = u.user_id
            JOIN training t ON r.training_id = t.training_id
-           ORDER BY r.registration_date DESC`
+           ORDER BY r.registration_date DESC`,
     );
 
     const registrations = registrationsResult.rows;
@@ -142,7 +142,7 @@ exports.getRegistrations = async (req, res) => {
              FROM registration_participant rp
              JOIN users u ON rp.user_id = u.user_id
              WHERE rp.registration_id = $1`,
-        [reg.registration_id]
+        [reg.registration_id],
       );
 
       // Add participants array into the registration object
@@ -152,7 +152,7 @@ exports.getRegistrations = async (req, res) => {
     return sendSuccessResponse(
       res,
       "Registrations fetched successfully",
-      registrations
+      registrations,
     );
   } catch (err) {
     console.error("Get registration error:", err);
@@ -175,7 +175,7 @@ exports.getRegistrationById = async (req, res) => {
        JOIN users u ON r.registrant_id = u.user_id
        JOIN training t ON r.training_id = t.training_id
        WHERE r.registration_id = $1`,
-      [registration_id]
+      [registration_id],
     );
 
     if (registrationResult.rows.length === 0) {
@@ -190,7 +190,7 @@ exports.getRegistrationById = async (req, res) => {
        FROM registration_participant rp
        JOIN users u ON rp.user_id = u.user_id
        WHERE rp.registration_id = $1`,
-      [registration_id]
+      [registration_id],
     );
 
     registration.participants = participantsResult.rows;
@@ -198,7 +198,7 @@ exports.getRegistrationById = async (req, res) => {
     return sendSuccessResponse(
       res,
       "Registration fetched successfully",
-      registration
+      registration,
     );
   } catch (err) {
     console.error("Get registration by ID error:", err);
@@ -245,7 +245,7 @@ exports.getRegistrationsByStatus = async (req, res) => {
        JOIN training t ON r.training_id = t.training_id
        WHERE r.status = ANY($1) -- Match any of the status
        ORDER BY r.registration_date DESC`,
-      [statusArray]
+      [statusArray],
     );
 
     const registrations = registrationsResult.rows;
@@ -257,7 +257,7 @@ exports.getRegistrationsByStatus = async (req, res) => {
          FROM registration_participant rp
          JOIN users u ON rp.user_id = u.user_id
          WHERE rp.registration_id = $1`,
-        [reg.registration_id]
+        [reg.registration_id],
       );
 
       // Add participants array into the registration object
@@ -267,7 +267,7 @@ exports.getRegistrationsByStatus = async (req, res) => {
     return sendSuccessResponse(
       res,
       "Registrations fetched successfully",
-      registrations
+      registrations,
     );
   } catch (err) {
     console.error("Get registrations by status error:", err);
@@ -286,7 +286,7 @@ exports.updateRegistrationStatus = async (req, res) => {
   if (!registration_id || status === undefined) {
     return sendBadRequestResponse(
       res,
-      "Registration ID and new status are required"
+      "Registration ID and new status are required",
     );
   }
 
@@ -301,7 +301,7 @@ exports.updateRegistrationStatus = async (req, res) => {
     // Check if the registration exists
     const registrationCheck = await client.query(
       `SELECT registration_id FROM registration WHERE registration_id = $1`,
-      [registration_id]
+      [registration_id],
     );
 
     if (registrationCheck.rows.length === 0) {
@@ -352,7 +352,7 @@ exports.savePaymentProof = async (req, res) => {
   if (!registration_id || !fileUrl) {
     return sendBadRequestResponse(
       res,
-      "Registration ID and file URL are required"
+      "Registration ID and file URL are required",
     );
   }
 
@@ -361,7 +361,7 @@ exports.savePaymentProof = async (req, res) => {
     // Check if the registration exists
     const registrationCheck = await client.query(
       `SELECT registration_id FROM registration WHERE registration_id = $1`,
-      [registration_id]
+      [registration_id],
     );
 
     if (registrationCheck.rows.length === 0) {
@@ -373,7 +373,7 @@ exports.savePaymentProof = async (req, res) => {
       `UPDATE registration 
        SET payment_proof = $1 
        WHERE registration_id = $2`,
-      [fileUrl, registration_id]
+      [fileUrl, registration_id],
     );
 
     return sendSuccessResponse(res, "Payment proof saved successfully");
@@ -454,7 +454,7 @@ exports.searchRegistrations = async (req, res) => {
         {
           total: groupResult.rows.length,
           data: groupResult.rows,
-        }
+        },
       );
     }
 
@@ -477,7 +477,7 @@ exports.searchRegistrations = async (req, res) => {
       return sendSuccessResponse(
         res,
         "Total participants and registrations per training fetched successfully",
-        trainingResult.rows
+        trainingResult.rows,
       );
     }
 
@@ -587,7 +587,7 @@ exports.searchRegistrations = async (req, res) => {
          FROM registration_participant rp
          JOIN users u ON rp.user_id = u.user_id
          WHERE rp.registration_id = $1`,
-        [reg.registration_id]
+        [reg.registration_id],
       );
       reg.participants = participantsResult.rows;
     }
@@ -595,7 +595,7 @@ exports.searchRegistrations = async (req, res) => {
     return sendSuccessResponse(
       res,
       "Registrations fetched successfully",
-      registrations
+      registrations,
     );
   } catch (err) {
     console.error("Search registrations error:", err);
@@ -619,7 +619,7 @@ exports.checkUserRegistration = async (req, res) => {
     // Check if training exists and is active (status = 1)
     const trainingCheck = await client.query(
       `SELECT training_id, status FROM training WHERE training_id = $1`,
-      [training_id]
+      [training_id],
     );
 
     if (trainingCheck.rows.length === 0) {
@@ -632,14 +632,18 @@ exports.checkUserRegistration = async (req, res) => {
     if (trainingStatus !== 1) {
       return sendBadRequestResponse(
         res,
-        "Registration check is only allowed for active training programs"
+        "Registration check is only allowed for active training programs",
       );
     }
 
-    // Query to check if user is already registered in the training
+    // Query to check if user has an ACTIVE registration (excluding cancelled and absent)
+    // User can re-register if:
+    // 1. Registration status = 5 (cancelled)
+    // 2. Registration status = 4 (completed) AND attendance_status = false (absent)
     const query = `
       SELECT 
         rp.registration_participant_id,
+        rp.attendance_status,
         r.registration_id,
         r.status AS registration_status,
         r.registration_date,
@@ -649,6 +653,7 @@ exports.checkUserRegistration = async (req, res) => {
       JOIN registration r ON rp.registration_id = r.registration_id
       JOIN training t ON r.training_id = t.training_id
       WHERE rp.user_id = $1 AND r.training_id = $2
+      ORDER BY r.registration_date DESC
       LIMIT 1
     `;
 
@@ -657,7 +662,27 @@ exports.checkUserRegistration = async (req, res) => {
     if (result.rows.length > 0) {
       const data = result.rows[0];
 
-      // Map numeric status to human-readable label
+      // Allow re-registration if:
+      // 1. Status is cancelled (5)
+      // 2. Status is completed (4) AND attendance is explicitly false (absent)
+      // Note: attendance_status === null means not yet marked, so still active
+      const isCancelled = data.registration_status === 5;
+      const isAbsent =
+        data.registration_status === 4 && data.attendance_status === false;
+
+      if (isCancelled || isAbsent) {
+        // User can register again
+        return sendSuccessResponse(res, "User can register for this training", {
+          isRegistered: false,
+          canReRegister: true,
+          previousRegistration: {
+            registration_id: data.registration_id,
+            status: isCancelled ? "Cancelled" : "Absent",
+          },
+        });
+      }
+
+      // User has active registration - block re-registration
       let statusLabel = "Upcoming";
       switch (data.registration_status) {
         case 4:
@@ -684,7 +709,7 @@ exports.checkUserRegistration = async (req, res) => {
       return sendSuccessResponse(
         res,
         "User already registered in this training",
-        responseData
+        responseData,
       );
     } else {
       // Not registered yet
@@ -715,7 +740,7 @@ exports.deleteRegistration = async (req, res) => {
     // Check if registration exists and is cancelled (status = 5)
     const regCheck = await client.query(
       `SELECT registration_id, status FROM registration WHERE registration_id = $1`,
-      [registration_id]
+      [registration_id],
     );
 
     if (regCheck.rows.length === 0) {
@@ -727,18 +752,18 @@ exports.deleteRegistration = async (req, res) => {
       await client.query("ROLLBACK");
       return sendBadRequestResponse(
         res,
-        "Only cancelled registrations can be deleted"
+        "Only cancelled registrations can be deleted",
       );
     }
 
     // Get all participant IDs related to this registration
     const participantsResult = await client.query(
       `SELECT registration_participant_id FROM registration_participant WHERE registration_id = $1`,
-      [registration_id]
+      [registration_id],
     );
 
     const participantIds = participantsResult.rows.map(
-      (row) => row.registration_participant_id
+      (row) => row.registration_participant_id,
     );
 
     // Delete related data in order (respecting foreign key constraints)
@@ -746,20 +771,20 @@ exports.deleteRegistration = async (req, res) => {
       // Delete reviews
       await client.query(
         `DELETE FROM review WHERE registration_participant_id = ANY($1)`,
-        [participantIds]
+        [participantIds],
       );
 
       // Delete certificates
       await client.query(
         `DELETE FROM certificate WHERE registration_participant_id = ANY($1)`,
-        [participantIds]
+        [participantIds],
       );
     }
 
     // Delete registration participants
     await client.query(
       `DELETE FROM registration_participant WHERE registration_id = $1`,
-      [registration_id]
+      [registration_id],
     );
 
     // Delete the registration itself
@@ -797,7 +822,7 @@ exports.deleteMultipleRegistrations = async (req, res) => {
     // Check which registrations exist and are cancelled
     const regCheck = await client.query(
       `SELECT registration_id FROM registration WHERE registration_id = ANY($1) AND status = 5`,
-      [registration_ids]
+      [registration_ids],
     );
 
     const validIds = regCheck.rows.map((row) => row.registration_id);
@@ -806,18 +831,18 @@ exports.deleteMultipleRegistrations = async (req, res) => {
       await client.query("ROLLBACK");
       return sendBadRequestResponse(
         res,
-        "No valid cancelled registrations found to delete"
+        "No valid cancelled registrations found to delete",
       );
     }
 
     // Get all participant IDs related to these registrations
     const participantsResult = await client.query(
       `SELECT registration_participant_id FROM registration_participant WHERE registration_id = ANY($1)`,
-      [validIds]
+      [validIds],
     );
 
     const participantIds = participantsResult.rows.map(
-      (row) => row.registration_participant_id
+      (row) => row.registration_participant_id,
     );
 
     let deletedCertificates = 0;
@@ -828,14 +853,14 @@ exports.deleteMultipleRegistrations = async (req, res) => {
       // Delete reviews
       const reviewResult = await client.query(
         `DELETE FROM review WHERE registration_participant_id = ANY($1)`,
-        [participantIds]
+        [participantIds],
       );
       deletedReviews = reviewResult.rowCount;
 
       // Delete certificates
       const certResult = await client.query(
         `DELETE FROM certificate WHERE registration_participant_id = ANY($1)`,
-        [participantIds]
+        [participantIds],
       );
       deletedCertificates = certResult.rowCount;
     }
@@ -843,13 +868,13 @@ exports.deleteMultipleRegistrations = async (req, res) => {
     // Delete registration participants
     await client.query(
       `DELETE FROM registration_participant WHERE registration_id = ANY($1)`,
-      [validIds]
+      [validIds],
     );
 
     // Delete the registrations
     await client.query(
       `DELETE FROM registration WHERE registration_id = ANY($1)`,
-      [validIds]
+      [validIds],
     );
 
     await client.query("COMMIT");
@@ -862,7 +887,7 @@ exports.deleteMultipleRegistrations = async (req, res) => {
         deleted_participants: participantIds.length,
         deleted_certificates: deletedCertificates,
         deleted_reviews: deletedReviews,
-      }
+      },
     );
   } catch (err) {
     await client.query("ROLLBACK");
@@ -881,7 +906,7 @@ exports.deleteAllCancelledRegistrations = async (req, res) => {
 
     // Get all cancelled registrations
     const regResult = await client.query(
-      `SELECT registration_id FROM registration WHERE status = 5`
+      `SELECT registration_id FROM registration WHERE status = 5`,
     );
 
     const cancelledIds = regResult.rows.map((row) => row.registration_id);
@@ -896,11 +921,11 @@ exports.deleteAllCancelledRegistrations = async (req, res) => {
     // Get all participant IDs related to these registrations
     const participantsResult = await client.query(
       `SELECT registration_participant_id FROM registration_participant WHERE registration_id = ANY($1)`,
-      [cancelledIds]
+      [cancelledIds],
     );
 
     const participantIds = participantsResult.rows.map(
-      (row) => row.registration_participant_id
+      (row) => row.registration_participant_id,
     );
 
     let deletedCertificates = 0;
@@ -911,14 +936,14 @@ exports.deleteAllCancelledRegistrations = async (req, res) => {
       // Delete reviews
       const reviewResult = await client.query(
         `DELETE FROM review WHERE registration_participant_id = ANY($1)`,
-        [participantIds]
+        [participantIds],
       );
       deletedReviews = reviewResult.rowCount;
 
       // Delete certificates
       const certResult = await client.query(
         `DELETE FROM certificate WHERE registration_participant_id = ANY($1)`,
-        [participantIds]
+        [participantIds],
       );
       deletedCertificates = certResult.rowCount;
     }
@@ -926,7 +951,7 @@ exports.deleteAllCancelledRegistrations = async (req, res) => {
     // Delete registration participants
     await client.query(
       `DELETE FROM registration_participant WHERE registration_id = ANY($1)`,
-      [cancelledIds]
+      [cancelledIds],
     );
 
     // Delete the registrations
@@ -942,14 +967,14 @@ exports.deleteAllCancelledRegistrations = async (req, res) => {
         deleted_participants: participantIds.length,
         deleted_certificates: deletedCertificates,
         deleted_reviews: deletedReviews,
-      }
+      },
     );
   } catch (err) {
     await client.query("ROLLBACK");
     console.error("Delete all cancelled registrations error:", err);
     return sendErrorResponse(
       res,
-      "Failed to delete all cancelled registrations"
+      "Failed to delete all cancelled registrations",
     );
   } finally {
     client.release();
